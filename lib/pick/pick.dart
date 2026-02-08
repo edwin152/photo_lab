@@ -459,7 +459,7 @@ class _PickSwipePageState extends State<PickSwipePage>
     if (photo == null) {
       return;
     }
-    await _repository.updateGroup(photoId: photo.id, groupName: groupName);
+    // 先同步更新 UI 状态，避免闪烁
     _actions.add(
       _SwipeAction(
         photoId: photo.id,
@@ -476,6 +476,8 @@ class _PickSwipePageState extends State<PickSwipePage>
           )
           .toList();
     });
+    // 在后台更新数据库
+    await _repository.updateGroup(photoId: photo.id, groupName: groupName);
   }
 
   Future<void> _undo() async {
@@ -507,9 +509,8 @@ class _PickSwipePageState extends State<PickSwipePage>
     _controller.stop();
     _isResetting = target == Offset.zero;
     if (_isResetting) {
-      _resetStartBackgroundProgress = (_dragOffset.dx.abs() /
-              _swipeReleaseDistance)
-          .clamp(0.0, 1.0);
+      _resetStartBackgroundProgress =
+          (_dragOffset.dx.abs() / _swipeReleaseDistance).clamp(0.0, 1.0);
     }
     _animation = Tween<Offset>(
       begin: _dragOffset,
@@ -606,9 +607,9 @@ class _PickSwipePageState extends State<PickSwipePage>
                                   .clamp(0.0, 1.0);
                           final backgroundProgress = _isResetting
                               ? (_resetStartBackgroundProgress +
-                                      (1 - _resetStartBackgroundProgress) *
-                                          _controller.value)
-                                  .clamp(0.0, 1.0)
+                                        (1 - _resetStartBackgroundProgress) *
+                                            _controller.value)
+                                    .clamp(0.0, 1.0)
                               : swipeProgress;
                           final settings = AppSettingsScope.of(context);
                           return Stack(
@@ -616,16 +617,28 @@ class _PickSwipePageState extends State<PickSwipePage>
                             clipBehavior: Clip.none,
                             children: [
                               if (nextPhoto != null && nextAsset != null)
-                                _buildBackgroundCard(
+                                _buildUnifiedCard(
+                                  key: ValueKey(nextPhoto.id),
                                   size: size,
                                   asset: nextAsset,
-                                  progress: backgroundProgress,
+                                  photo: nextPhoto,
+                                  isBackground: true,
+                                  backgroundProgress: backgroundProgress,
+                                  dragOffset: Offset.zero,
+                                  swipeThreshold: _swipeReleaseDistance,
+                                  onPanUpdate: null,
+                                  onPanEnd: null,
+                                  onDoubleTap: null,
+                                  onTap: null,
                                 ),
                               if (photo != null && asset != null)
-                                _buildCard(
+                                _buildUnifiedCard(
+                                  key: ValueKey(photo.id),
                                   size: size,
                                   asset: asset,
                                   photo: photo,
+                                  isBackground: false,
+                                  backgroundProgress: 1.0,
                                   dragOffset: activeOffset,
                                   swipeThreshold: _swipeReleaseDistance,
                                   onPanUpdate: _onPanUpdate,
@@ -706,20 +719,26 @@ class _SwipeAction {
   final String newGroup;
 }
 
-Widget _buildCard({
+Widget _buildUnifiedCard({
+  Key? key,
   required Size size,
   required AssetEntity asset,
   required PickPhoto photo,
+  required bool isBackground,
+  required double backgroundProgress,
   required Offset dragOffset,
   required double swipeThreshold,
-  required GestureDragUpdateCallback onPanUpdate,
-  required GestureDragEndCallback onPanEnd,
+  required GestureDragUpdateCallback? onPanUpdate,
+  required GestureDragEndCallback? onPanEnd,
   required VoidCallback? onDoubleTap,
   required VoidCallback? onTap,
 }) {
-  final rotation = dragOffset.dx / size.width * 0.3;
+  final borderRadius = BorderRadius.circular(20);
+
+  // 计算前景卡片的参数
+  final rotation = isBackground ? 0.0 : dragOffset.dx / size.width * 0.3;
   final swipeProgress = (dragOffset.dx.abs() / swipeThreshold).clamp(0.0, 1.0);
-  final isDragging = dragOffset.dx.abs() > 4;
+  final isDragging = !isBackground && dragOffset.dx.abs() > 4;
   final isReady = swipeProgress >= 1;
   final baseColor = dragOffset.dx > 0
       ? Colors.green
@@ -729,113 +748,104 @@ Widget _buildCard({
   final shadowColor = isDragging
       ? baseColor.withValues(alpha: 0.2 + 0.4 * swipeProgress)
       : Colors.black26;
-  final borderRadius = BorderRadius.circular(20);
-  return GestureDetector(
-    onPanUpdate: onPanUpdate,
-    onPanEnd: onPanEnd,
-    onDoubleTap: onDoubleTap,
-    onTap: onTap,
-    child: Transform.translate(
-      offset: dragOffset,
-      child: Transform.rotate(
-        angle: rotation,
-        child: Stack(
-          clipBehavior: Clip.none,
-          children: [
-            Container(
-              width: size.width,
-              height: size.height,
-              decoration: BoxDecoration(
-                color: Colors.grey.shade100,
-                borderRadius: borderRadius,
-                boxShadow: [
-                  BoxShadow(
-                    color: shadowColor,
-                    blurRadius: 18,
-                    offset: const Offset(0, 6),
-                  ),
-                  BoxShadow(
-                    color: shadowColor.withValues(alpha: 0.35),
-                    blurRadius: 12,
-                    offset: const Offset(0, 0),
-                  ),
-                ],
-              ),
-              child: ClipRRect(
-                borderRadius: borderRadius,
-                child: AssetEntityImage(
-                  asset,
-                  fit: BoxFit.contain,
-                  isOriginal: false,
-                ),
-              ),
-            ),
-            if (isDragging)
-              Positioned.fill(
-                child: Center(
-                  child: AnimatedOpacity(
-                    opacity: isReady ? 1 : 0,
-                    duration: const Duration(milliseconds: 120),
-                    child: Container(
-                      width: 72,
-                      height: 72,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.9),
-                        shape: BoxShape.circle,
+
+  // 背景卡片的阴影颜色，随 progress 逐渐变深
+  final backgroundShadowColor = isBackground
+      ? Colors.black.withValues(alpha: 0.06 + 0.06 * backgroundProgress)
+      : shadowColor;
+
+  // 背景卡片的参数
+  final scale = isBackground ? (0.5 + 0.5 * backgroundProgress) : 1.0;
+  final opacity = isBackground ? backgroundProgress : 1.0;
+
+  // 统一的结构：所有卡片都用相同的根 widget 类型
+  return Opacity(
+    key: key,
+    opacity: opacity,
+    child: Transform.scale(
+      scale: scale,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onPanUpdate: onPanUpdate,
+        onPanEnd: onPanEnd,
+        onDoubleTap: onDoubleTap,
+        onTap: onTap,
+        child: Transform.translate(
+          offset: dragOffset,
+          child: Transform.rotate(
+            angle: rotation,
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Container(
+                  width: size.width,
+                  height: size.height,
+                  decoration: BoxDecoration(
+                    boxShadow: [
+                      BoxShadow(
+                        color: backgroundShadowColor,
+                        blurRadius: isBackground
+                            ? 6 + 12 * backgroundProgress
+                            : 18,
+                        offset: isBackground
+                            ? Offset(0, 2 + 4 * backgroundProgress)
+                            : const Offset(0, 6),
                       ),
-                      child: Icon(
-                        dragOffset.dx > 0 ? Icons.check : Icons.close,
-                        color: baseColor,
-                        size: 40,
+                      BoxShadow(
+                        color: backgroundShadowColor.withValues(
+                          alpha: isBackground
+                              ? backgroundProgress * 0.35
+                              : 0.35,
+                        ),
+                        blurRadius: isBackground
+                            ? 4 + 8 * backgroundProgress
+                            : 12,
+                        offset: const Offset(0, 0),
+                      ),
+                    ],
+                  ),
+                  child: RepaintBoundary(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade100,
+                        borderRadius: borderRadius,
+                      ),
+                      child: ClipRRect(
+                        borderRadius: borderRadius,
+                        child: AssetEntityImage(
+                          asset,
+                          key: ValueKey(asset.id),
+                          fit: BoxFit.contain,
+                          isOriginal: false,
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
-          ],
-        ),
-      ),
-    ),
-  );
-}
-
-Widget _buildBackgroundCard({
-  required Size size,
-  required AssetEntity asset,
-  required double progress,
-}) {
-  final scale = 0.86 + 0.1 * progress;
-  final opacity = 0.55 + 0.3 * progress;
-  final borderRadius = BorderRadius.circular(20);
-  return Opacity(
-    opacity: opacity,
-    child: Transform.scale(
-      scale: scale,
-      child: Container(
-        width: size.width,
-        height: size.height,
-        decoration: BoxDecoration(
-          color: Colors.grey.shade100,
-          borderRadius: borderRadius,
-          boxShadow: const [
-            BoxShadow(
-              color: Colors.black12,
-              blurRadius: 10,
-              offset: Offset(0, 4),
+                if (isDragging)
+                  Positioned.fill(
+                    child: Center(
+                      child: AnimatedOpacity(
+                        opacity: isReady ? 1 : 0,
+                        duration: const Duration(milliseconds: 120),
+                        child: Container(
+                          width: 72,
+                          height: 72,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.9),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            dragOffset.dx > 0 ? Icons.check : Icons.close,
+                            color: baseColor,
+                            size: 40,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
             ),
-            BoxShadow(
-              color: Colors.black12,
-              blurRadius: 8,
-              offset: Offset(0, 0),
-            ),
-          ],
-        ),
-        child: ClipRRect(
-          borderRadius: borderRadius,
-          child: AssetEntityImage(
-            asset,
-            fit: BoxFit.contain,
-            isOriginal: false,
           ),
         ),
       ),
@@ -1171,11 +1181,11 @@ class _AssetEntityImageState extends State<AssetEntityImage> {
     return widget.asset
         .thumbnailDataWithSize(const ThumbnailSize.square(500))
         .then((bytes) {
-      if (bytes != null) {
-        _thumbnailCache[widget.asset.id] = bytes;
-      }
-      return bytes;
-    });
+          if (bytes != null) {
+            _thumbnailCache[widget.asset.id] = bytes;
+          }
+          return bytes;
+        });
   }
 
   @override
