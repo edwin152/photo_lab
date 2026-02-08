@@ -377,7 +377,7 @@ class _PickSwipePageState extends State<PickSwipePage>
   Offset _dragOffset = Offset.zero;
   late AnimationController _controller;
   Animation<Offset>? _animation;
-  static const double _swipeReleaseDistance = 120;
+  static const double _swipeReleaseDistance = 100;
 
   @override
   void initState() {
@@ -592,12 +592,8 @@ class _PickSwipePageState extends State<PickSwipePage>
                           final size = Size(cardWidth, cardWidth * 4 / 3);
                           final activeOffset = _animation?.value ?? _dragOffset;
                           final swipeProgress =
-                              (activeOffset.dx.abs() /
-                                      _swipeReleaseDistance)
-                                  .clamp(
-                                0.0,
-                                1.0,
-                              );
+                              (activeOffset.dx.abs() / _swipeReleaseDistance)
+                                  .clamp(0.0, 1.0);
                           return Stack(
                             alignment: Alignment.center,
                             clipBehavior: Clip.none,

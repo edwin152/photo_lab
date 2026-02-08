@@ -59,10 +59,7 @@ class PickSession {
 }
 
 class PickGroupSummary {
-  const PickGroupSummary({
-    required this.groupName,
-    required this.count,
-  });
+  const PickGroupSummary({required this.groupName, required this.count});
 
   final String groupName;
   final int count;
