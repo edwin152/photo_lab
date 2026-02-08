@@ -21,7 +21,7 @@ class PickFilter {
   const PickFilter.grouped() : this._(PickFilterType.grouped, null);
 
   const PickFilter.group(String groupName)
-      : this._(PickFilterType.group, groupName);
+    : this._(PickFilterType.group, groupName);
 
   final PickFilterType type;
   final String? groupName;
@@ -46,7 +46,7 @@ class PickSwipePage extends StatefulWidget {
 }
 
 class _PickSwipePageState extends State<PickSwipePage>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   final PickRepository _repository = PickRepository.instance;
   final List<_SwipeAction> _actions = [];
   final Map<String, AssetEntity> _assets = {};
@@ -58,6 +58,13 @@ class _PickSwipePageState extends State<PickSwipePage>
   bool _isResetting = false;
   double _resetStartBackgroundProgress = 0.0;
   static const double _swipeReleaseDistance = 100;
+
+  // 飞出卡片的独立动画
+  late AnimationController _exitController;
+  Animation<Offset>? _exitAnimation;
+  PickPhoto? _exitingPhoto;
+  AssetEntity? _exitingAsset;
+  Offset _exitingStartOffset = Offset.zero;
 
   @override
   void initState() {
@@ -72,12 +79,23 @@ class _PickSwipePageState extends State<PickSwipePage>
       }
       setState(() {});
     });
+    _exitController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 260),
+    );
+    _exitController.addListener(() {
+      if (!mounted) {
+        return;
+      }
+      setState(() {});
+    });
     _loadAssets();
   }
 
   @override
   void dispose() {
     _controller.dispose();
+    _exitController.dispose();
     super.dispose();
   }
 
@@ -213,18 +231,52 @@ class _PickSwipePageState extends State<PickSwipePage>
 
   void _onPanEnd(DragEndDetails details) {
     if (_dragOffset.dx > _swipeReleaseDistance) {
-      _animateTo(
-        const Offset(500, 0),
-        onComplete: () => _handleDecision(groupConfirmed),
-      );
+      // 立即开始飞出动画并更新列表
+      _startExitAnimation(const Offset(500, 0), groupName: groupConfirmed);
     } else if (_dragOffset.dx < -_swipeReleaseDistance) {
-      _animateTo(
-        const Offset(-500, 0),
-        onComplete: () => _handleDecision(groupPendingDelete),
-      );
+      _startExitAnimation(const Offset(-500, 0), groupName: groupPendingDelete);
     } else {
       _animateTo(Offset.zero, onComplete: () {});
     }
+  }
+
+  void _startExitAnimation(Offset target, {required String groupName}) {
+    final photo = _currentPhoto;
+    final asset = photo == null ? null : _assetForPhoto(photo);
+    if (photo == null || asset == null) {
+      return;
+    }
+
+    // 保存正在飞出的卡片信息
+    _exitingPhoto = photo;
+    _exitingAsset = asset;
+    _exitingStartOffset = _dragOffset;
+
+    // 立即更新照片列表，让下一张卡片成为当前卡片
+    _handleDecision(groupName);
+
+    // 重置当前卡片的拖动状态
+    setState(() {
+      _dragOffset = Offset.zero;
+      _animation = null;
+      _isResetting = false;
+    });
+
+    // 启动飞出卡片的动画
+    _exitController.stop();
+    _exitAnimation = Tween<Offset>(
+      begin: _exitingStartOffset,
+      end: target,
+    ).animate(CurvedAnimation(parent: _exitController, curve: Curves.easeOut));
+    _exitController
+      ..reset()
+      ..forward().whenComplete(() {
+        setState(() {
+          _exitingPhoto = null;
+          _exitingAsset = null;
+          _exitAnimation = null;
+        });
+      });
   }
 
   Future<void> _openPreview(PickPhoto photo) async {
@@ -232,9 +284,26 @@ class _PickSwipePageState extends State<PickSwipePage>
     if (asset == null) {
       return;
     }
-    await Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => PickPreviewPage(asset: asset)));
+    await Navigator.of(context).push(
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) =>
+            PickPreviewPage(asset: asset),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          const curve = Curves.easeInOut;
+          final curvedAnimation = CurvedAnimation(
+            parent: animation,
+            curve: curve,
+            reverseCurve: curve,
+          );
+          return ScaleTransition(
+            scale: Tween<double>(begin: 0.0, end: 1.0).animate(curvedAnimation),
+            child: FadeTransition(opacity: curvedAnimation, child: child),
+          );
+        },
+        transitionDuration: const Duration(milliseconds: 300),
+        reverseTransitionDuration: const Duration(milliseconds: 300),
+      ),
+    );
   }
 
   @override
@@ -331,6 +400,25 @@ class _PickSwipePageState extends State<PickSwipePage>
                                 )
                               else
                                 const Text('没有更多照片了'),
+                              // 飞出的卡片渲染在最顶层
+                              if (_exitingPhoto != null &&
+                                  _exitingAsset != null)
+                                _buildUnifiedCard(
+                                  key: ValueKey('exiting_${_exitingPhoto!.id}'),
+                                  size: size,
+                                  asset: _exitingAsset!,
+                                  photo: _exitingPhoto!,
+                                  isBackground: false,
+                                  backgroundProgress: 1.0,
+                                  dragOffset:
+                                      _exitAnimation?.value ??
+                                      _exitingStartOffset,
+                                  swipeThreshold: _swipeReleaseDistance,
+                                  onPanUpdate: null,
+                                  onPanEnd: null,
+                                  onDoubleTap: null,
+                                  onTap: null,
+                                ),
                             ],
                           );
                         },
@@ -422,8 +510,8 @@ Widget _buildUnifiedCard({
   final baseColor = dragOffset.dx > 0
       ? Colors.green
       : dragOffset.dx < 0
-          ? Colors.red
-          : Colors.transparent;
+      ? Colors.red
+      : Colors.transparent;
   final shadowColor = isDragging
       ? baseColor.withValues(alpha: 0.2 + 0.4 * swipeProgress)
       : Colors.black26;
