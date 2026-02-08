@@ -441,6 +441,14 @@ class _PickSwipePageState extends State<PickSwipePage>
     return _photos[_actions.length];
   }
 
+  PickPhoto? get _nextPhoto {
+    final nextIndex = _actions.length + 1;
+    if (_photos.isEmpty || nextIndex >= _photos.length) {
+      return null;
+    }
+    return _photos[nextIndex];
+  }
+
   AssetEntity? _assetForPhoto(PickPhoto photo) => _assets[photo.assetId];
 
   Future<void> _handleDecision(String groupName) async {
@@ -511,19 +519,19 @@ class _PickSwipePageState extends State<PickSwipePage>
 
   void _onPanUpdate(DragUpdateDetails details) {
     setState(() {
-      _dragOffset += details.delta;
+      _dragOffset += Offset(details.delta.dx, 0);
     });
   }
 
   void _onPanEnd(DragEndDetails details) {
     if (_dragOffset.dx > _swipeThreshold) {
       _animateTo(
-        Offset(500, _dragOffset.dy),
+        const Offset(500, 0),
         onComplete: () => _handleDecision(groupConfirmed),
       );
     } else if (_dragOffset.dx < -_swipeThreshold) {
       _animateTo(
-        Offset(-500, _dragOffset.dy),
+        const Offset(-500, 0),
         onComplete: () => _handleDecision(groupPendingDelete),
       );
     } else {
@@ -544,7 +552,9 @@ class _PickSwipePageState extends State<PickSwipePage>
   @override
   Widget build(BuildContext context) {
     final photo = _currentPhoto;
+    final nextPhoto = _nextPhoto;
     final asset = photo == null ? null : _assetForPhoto(photo);
+    final nextAsset = nextPhoto == null ? null : _assetForPhoto(nextPhoto);
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) {
@@ -575,20 +585,30 @@ class _PickSwipePageState extends State<PickSwipePage>
                             0.0,
                             constraints.maxHeight - 32,
                           );
-                          final size = Size(
-                            min(maxWidth, 360),
-                            min(maxHeight, 520),
-                          );
+                          final side = min(min(maxWidth, maxHeight), 360);
+                          final size = Size.square(side);
+                          final activeOffset = _animation?.value ?? _dragOffset;
+                          final swipeProgress =
+                              (activeOffset.dx.abs() / _swipeThreshold).clamp(
+                                0.0,
+                                1.0,
+                              );
                           return Stack(
                             alignment: Alignment.center,
                             clipBehavior: Clip.none,
                             children: [
+                              if (nextPhoto != null && nextAsset != null)
+                                _buildBackgroundCard(
+                                  size: size,
+                                  asset: nextAsset,
+                                  progress: swipeProgress,
+                                ),
                               if (photo != null && asset != null)
                                 _buildCard(
                                   size: size,
                                   asset: asset,
                                   photo: photo,
-                                  dragOffset: _animation?.value ?? _dragOffset,
+                                  dragOffset: activeOffset,
                                   swipeThreshold: _swipeThreshold,
                                   onPanUpdate: _onPanUpdate,
                                   onPanEnd: _onPanEnd,
@@ -676,18 +696,13 @@ Widget _buildCard({
   final rotation = dragOffset.dx / size.width * 0.3;
   final swipeProgress = (dragOffset.dx.abs() / swipeThreshold).clamp(0.0, 1.0);
   final isDragging = dragOffset.dx.abs() > 4;
-  final actionLabel = dragOffset.dx > 0
-      ? groupConfirmed
-      : dragOffset.dx < 0
-      ? groupPendingDelete
-      : '';
-  final hintLabel = swipeProgress >= 1 ? '松手$actionLabel' : '继续滑动$actionLabel';
+  final isReady = swipeProgress >= 1;
   final baseColor = dragOffset.dx > 0
       ? Colors.green
       : dragOffset.dx < 0
       ? Colors.red
       : Colors.transparent;
-  final overlayColor = baseColor.withValues(alpha: 0.2 + 0.6 * swipeProgress);
+  final overlayColor = baseColor.withValues(alpha: 0.12 + 0.48 * swipeProgress);
   return GestureDetector(
     onPanUpdate: onPanUpdate,
     onPanEnd: onPanEnd,
@@ -703,8 +718,7 @@ Widget _buildCard({
               width: size.width,
               height: size.height,
               decoration: BoxDecoration(
-                color: Colors.grey.shade200,
-                borderRadius: BorderRadius.circular(20),
+                color: Colors.grey.shade100,
                 boxShadow: const [
                   BoxShadow(
                     color: Colors.black26,
@@ -714,69 +728,73 @@ Widget _buildCard({
                 ],
               ),
               child: ClipRRect(
-                borderRadius: BorderRadius.circular(20),
                 child: AssetEntityImage(
                   asset,
-                  fit: BoxFit.cover,
+                  fit: BoxFit.contain,
                   isOriginal: false,
                 ),
               ),
             ),
             if (isDragging)
-              Positioned(
-                top: 24,
-                left: dragOffset.dx > 0 ? 24 : null,
-                right: dragOffset.dx < 0 ? 24 : null,
-                child: Transform.rotate(
-                  angle: dragOffset.dx > 0 ? -0.2 : 0.2,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.08),
-                      border: Border.all(color: baseColor, width: 3),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      hintLabel,
-                      style: TextStyle(
-                        color: baseColor,
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            if (isDragging)
-              Positioned(
-                left: dragOffset.dx > 0 ? 0 : null,
-                right: dragOffset.dx < 0 ? 0 : null,
-                top: size.height * 0.5 - 20,
-                child: Opacity(
-                  opacity: swipeProgress,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: overlayColor,
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    child: Text(
-                      '释放',
-                      style: TextStyle(
-                        color: baseColor,
-                        fontWeight: FontWeight.w600,
+              Positioned.fill(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(color: overlayColor),
+                  child: Center(
+                    child: AnimatedOpacity(
+                      opacity: isReady ? 1 : 0,
+                      duration: const Duration(milliseconds: 120),
+                      child: Container(
+                        width: 72,
+                        height: 72,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.9),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          dragOffset.dx > 0 ? Icons.check : Icons.close,
+                          color: baseColor,
+                          size: 40,
+                        ),
                       ),
                     ),
                   ),
                 ),
               ),
           ],
+        ),
+      ),
+    ),
+  );
+}
+
+Widget _buildBackgroundCard({
+  required Size size,
+  required AssetEntity asset,
+  required double progress,
+}) {
+  final scale = 0.92 + 0.08 * progress;
+  final opacity = 0.7 + 0.3 * progress;
+  return Opacity(
+    opacity: opacity,
+    child: Transform.scale(
+      scale: scale,
+      child: Container(
+        width: size.width,
+        height: size.height,
+        decoration: BoxDecoration(
+          color: Colors.grey.shade100,
+          boxShadow: const [
+            BoxShadow(
+              color: Colors.black12,
+              blurRadius: 10,
+              offset: Offset(0, 6),
+            ),
+          ],
+        ),
+        child: AssetEntityImage(
+          asset,
+          fit: BoxFit.contain,
+          isOriginal: false,
         ),
       ),
     ),
