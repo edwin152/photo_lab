@@ -87,19 +87,15 @@ class PickRepository {
     final batch = db.batch();
     final now = DateTime.now().toIso8601String();
     for (final assetId in assetIds) {
-      batch.insert(
-        'pick_photos',
-        {
-          'session_id': sessionId,
-          'asset_id': assetId,
-          'group_name': null,
-          'tag1': null,
-          'tag2': null,
-          'tag3': null,
-          'created_at': now,
-        },
-        conflictAlgorithm: ConflictAlgorithm.ignore,
-      );
+      batch.insert('pick_photos', {
+        'session_id': sessionId,
+        'asset_id': assetId,
+        'group_name': null,
+        'tag1': null,
+        'tag2': null,
+        'tag3': null,
+        'created_at': now,
+      }, conflictAlgorithm: ConflictAlgorithm.ignore);
     }
     await batch.commit(noResult: true);
     _cachedPhotos = null;
@@ -157,20 +153,14 @@ class PickRepository {
     final db = await _getDatabase();
     await db.update(
       'pick_photos',
-      {
-        if (tag1 != null) 'tag1': tag1,
-        if (tag2 != null) 'tag2': tag2,
-        if (tag3 != null) 'tag3': tag3,
-      },
+      {'tag1': ?tag1, 'tag2': ?tag2, 'tag3': ?tag3},
       where: 'id = ?',
       whereArgs: [photoId],
     );
     _cachedPhotos = null;
   }
 
-  Future<void> resetGroup({
-    required int photoId,
-  }) async {
+  Future<void> resetGroup({required int photoId}) async {
     final db = await _getDatabase();
     await db.update(
       'pick_photos',
@@ -183,13 +173,16 @@ class PickRepository {
 
   Future<List<PickGroupSummary>> fetchGroupSummaries(int sessionId) async {
     final db = await _getDatabase();
-    final rows = await db.rawQuery('''
+    final rows = await db.rawQuery(
+      '''
       SELECT group_name as groupName, COUNT(*) as count
       FROM pick_photos
       WHERE session_id = ? AND group_name IS NOT NULL
       GROUP BY group_name
       ORDER BY count DESC
-    ''', [sessionId]);
+    ''',
+      [sessionId],
+    );
     return rows
         .map(
           (row) => PickGroupSummary(

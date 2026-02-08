@@ -545,10 +545,12 @@ class _PickSwipePageState extends State<PickSwipePage>
   Widget build(BuildContext context) {
     final photo = _currentPhoto;
     final asset = photo == null ? null : _assetForPhoto(photo);
-    return WillPopScope(
-      onWillPop: () async {
-        Navigator.of(context).pop(_actions.isNotEmpty);
-        return false;
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) {
+          Navigator.of(context).pop(_actions.isNotEmpty);
+        }
       },
       child: Scaffold(
         appBar: AppBar(
@@ -569,7 +571,10 @@ class _PickSwipePageState extends State<PickSwipePage>
                       child: LayoutBuilder(
                         builder: (context, constraints) {
                           final maxWidth = max(0.0, constraints.maxWidth - 32);
-                          final maxHeight = max(0.0, constraints.maxHeight - 32);
+                          final maxHeight = max(
+                            0.0,
+                            constraints.maxHeight - 32,
+                          );
                           final size = Size(
                             min(maxWidth, 360),
                             min(maxHeight, 520),
@@ -676,15 +681,13 @@ Widget _buildCard({
       : dragOffset.dx < 0
       ? groupPendingDelete
       : '';
-  final hintLabel = swipeProgress >= 1
-      ? '松手$actionLabel'
-      : '继续滑动$actionLabel';
+  final hintLabel = swipeProgress >= 1 ? '松手$actionLabel' : '继续滑动$actionLabel';
   final baseColor = dragOffset.dx > 0
       ? Colors.green
       : dragOffset.dx < 0
       ? Colors.red
       : Colors.transparent;
-  final overlayColor = baseColor.withOpacity(0.2 + 0.6 * swipeProgress);
+  final overlayColor = baseColor.withValues(alpha: 0.2 + 0.6 * swipeProgress);
   return GestureDetector(
     onPanUpdate: onPanUpdate,
     onPanEnd: onPanEnd,
@@ -732,7 +735,7 @@ Widget _buildCard({
                       vertical: 8,
                     ),
                     decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.08),
+                      color: Colors.black.withValues(alpha: 0.08),
                       border: Border.all(color: baseColor, width: 3),
                       borderRadius: BorderRadius.circular(12),
                     ),
@@ -893,9 +896,7 @@ class _PickSelectionPageState extends State<PickSelectionPage> {
         actions: [
           IconButton(
             tooltip: _ascending ? '按时间倒序' : '按时间正序',
-            icon: Icon(
-              _ascending ? Icons.arrow_upward : Icons.arrow_downward,
-            ),
+            icon: Icon(_ascending ? Icons.arrow_upward : Icons.arrow_downward),
             onPressed: _assets.isEmpty ? null : _toggleOrder,
           ),
           if (_albums.isNotEmpty)
@@ -1017,8 +1018,9 @@ class _PickPreviewPageState extends State<PickPreviewPage> {
                     snapshot.data != null) {
                   return PhotoView(
                     imageProvider: MemoryImage(snapshot.data!),
-                    backgroundDecoration:
-                        const BoxDecoration(color: Colors.black),
+                    backgroundDecoration: const BoxDecoration(
+                      color: Colors.black,
+                    ),
                     minScale: PhotoViewComputedScale.contained,
                     maxScale: PhotoViewComputedScale.covered * 3.0,
                   );
