@@ -377,7 +377,7 @@ class _PickSwipePageState extends State<PickSwipePage>
   Offset _dragOffset = Offset.zero;
   late AnimationController _controller;
   Animation<Offset>? _animation;
-  static const double _swipeThreshold = 120;
+  static const double _swipeReleaseDistance = 120;
 
   @override
   void initState() {
@@ -524,12 +524,12 @@ class _PickSwipePageState extends State<PickSwipePage>
   }
 
   void _onPanEnd(DragEndDetails details) {
-    if (_dragOffset.dx > _swipeThreshold) {
+    if (_dragOffset.dx > _swipeReleaseDistance) {
       _animateTo(
         const Offset(500, 0),
         onComplete: () => _handleDecision(groupConfirmed),
       );
-    } else if (_dragOffset.dx < -_swipeThreshold) {
+    } else if (_dragOffset.dx < -_swipeReleaseDistance) {
       _animateTo(
         const Offset(-500, 0),
         onComplete: () => _handleDecision(groupPendingDelete),
@@ -585,11 +585,16 @@ class _PickSwipePageState extends State<PickSwipePage>
                             0.0,
                             constraints.maxHeight - 32,
                           );
-                          final side = min(min(maxWidth, maxHeight), 360.0);
-                          final size = Size.square(side);
+                          final cardWidth = min(
+                            min(maxWidth, maxHeight * 3 / 4),
+                            360.0,
+                          );
+                          final size = Size(cardWidth, cardWidth * 4 / 3);
                           final activeOffset = _animation?.value ?? _dragOffset;
                           final swipeProgress =
-                              (activeOffset.dx.abs() / _swipeThreshold).clamp(
+                              (activeOffset.dx.abs() /
+                                      _swipeReleaseDistance)
+                                  .clamp(
                                 0.0,
                                 1.0,
                               );
@@ -609,7 +614,7 @@ class _PickSwipePageState extends State<PickSwipePage>
                                   asset: asset,
                                   photo: photo,
                                   dragOffset: activeOffset,
-                                  swipeThreshold: _swipeThreshold,
+                                  swipeThreshold: _swipeReleaseDistance,
                                   onPanUpdate: _onPanUpdate,
                                   onPanEnd: _onPanEnd,
                                   onDoubleTap: () => _openPreview(photo),
@@ -702,7 +707,10 @@ Widget _buildCard({
       : dragOffset.dx < 0
       ? Colors.red
       : Colors.transparent;
-  final overlayColor = baseColor.withValues(alpha: 0.12 + 0.48 * swipeProgress);
+  final shadowColor = isDragging
+      ? baseColor.withValues(alpha: 0.2 + 0.4 * swipeProgress)
+      : Colors.black26;
+  final borderRadius = BorderRadius.circular(20);
   return GestureDetector(
     onPanUpdate: onPanUpdate,
     onPanEnd: onPanEnd,
@@ -719,15 +727,17 @@ Widget _buildCard({
               height: size.height,
               decoration: BoxDecoration(
                 color: Colors.grey.shade100,
-                boxShadow: const [
+                borderRadius: borderRadius,
+                boxShadow: [
                   BoxShadow(
-                    color: Colors.black26,
-                    blurRadius: 16,
-                    offset: Offset(0, 8),
+                    color: shadowColor,
+                    blurRadius: 18,
+                    offset: const Offset(0, 10),
                   ),
                 ],
               ),
               child: ClipRRect(
+                borderRadius: borderRadius,
                 child: AssetEntityImage(
                   asset,
                   fit: BoxFit.contain,
@@ -737,24 +747,21 @@ Widget _buildCard({
             ),
             if (isDragging)
               Positioned.fill(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(color: overlayColor),
-                  child: Center(
-                    child: AnimatedOpacity(
-                      opacity: isReady ? 1 : 0,
-                      duration: const Duration(milliseconds: 120),
-                      child: Container(
-                        width: 72,
-                        height: 72,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.9),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          dragOffset.dx > 0 ? Icons.check : Icons.close,
-                          color: baseColor,
-                          size: 40,
-                        ),
+                child: Center(
+                  child: AnimatedOpacity(
+                    opacity: isReady ? 1 : 0,
+                    duration: const Duration(milliseconds: 120),
+                    child: Container(
+                      width: 72,
+                      height: 72,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.9),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        dragOffset.dx > 0 ? Icons.check : Icons.close,
+                        color: baseColor,
+                        size: 40,
                       ),
                     ),
                   ),
@@ -772,8 +779,9 @@ Widget _buildBackgroundCard({
   required AssetEntity asset,
   required double progress,
 }) {
-  final scale = 0.92 + 0.08 * progress;
-  final opacity = 0.7 + 0.3 * progress;
+  final scale = 0.86 + 0.1 * progress;
+  final opacity = 0.55 + 0.3 * progress;
+  final borderRadius = BorderRadius.circular(20);
   return Opacity(
     opacity: opacity,
     child: Transform.scale(
@@ -783,6 +791,7 @@ Widget _buildBackgroundCard({
         height: size.height,
         decoration: BoxDecoration(
           color: Colors.grey.shade100,
+          borderRadius: borderRadius,
           boxShadow: const [
             BoxShadow(
               color: Colors.black12,
@@ -791,7 +800,14 @@ Widget _buildBackgroundCard({
             ),
           ],
         ),
-        child: AssetEntityImage(asset, fit: BoxFit.contain, isOriginal: false),
+        child: ClipRRect(
+          borderRadius: borderRadius,
+          child: AssetEntityImage(
+            asset,
+            fit: BoxFit.contain,
+            isOriginal: false,
+          ),
+        ),
       ),
     ),
   );
