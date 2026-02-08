@@ -585,7 +585,7 @@ class _PickSwipePageState extends State<PickSwipePage>
                             0.0,
                             constraints.maxHeight - 32,
                           );
-                          final side = min(min(maxWidth, maxHeight), 360);
+                          final side = min(min(maxWidth, maxHeight), 360.0);
                           final size = Size.square(side);
                           final activeOffset = _animation?.value ?? _dragOffset;
                           final swipeProgress =
@@ -791,11 +791,7 @@ Widget _buildBackgroundCard({
             ),
           ],
         ),
-        child: AssetEntityImage(
-          asset,
-          fit: BoxFit.contain,
-          isOriginal: false,
-        ),
+        child: AssetEntityImage(asset, fit: BoxFit.contain, isOriginal: false),
       ),
     ),
   );
