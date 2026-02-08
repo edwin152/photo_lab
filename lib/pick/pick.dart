@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:photo_manager/photo_manager.dart';
+import 'package:photo_view/photo_view.dart';
 
 import 'pick_models.dart';
 import 'pick_repository.dart';
@@ -376,6 +377,7 @@ class _PickSwipePageState extends State<PickSwipePage>
   Offset _dragOffset = Offset.zero;
   late AnimationController _controller;
   Animation<Offset>? _animation;
+  static const double _swipeThreshold = 120;
 
   @override
   void initState() {
@@ -384,6 +386,12 @@ class _PickSwipePageState extends State<PickSwipePage>
       vsync: this,
       duration: const Duration(milliseconds: 260),
     );
+    _controller.addListener(() {
+      if (!mounted) {
+        return;
+      }
+      setState(() {});
+    });
     _loadAssets();
   }
 
@@ -508,13 +516,12 @@ class _PickSwipePageState extends State<PickSwipePage>
   }
 
   void _onPanEnd(DragEndDetails details) {
-    const threshold = 120;
-    if (_dragOffset.dx > threshold) {
+    if (_dragOffset.dx > _swipeThreshold) {
       _animateTo(
         Offset(500, _dragOffset.dy),
         onComplete: () => _handleDecision(groupConfirmed),
       );
-    } else if (_dragOffset.dx < -threshold) {
+    } else if (_dragOffset.dx < -_swipeThreshold) {
       _animateTo(
         Offset(-500, _dragOffset.dy),
         onComplete: () => _handleDecision(groupPendingDelete),
@@ -569,6 +576,7 @@ class _PickSwipePageState extends State<PickSwipePage>
                           );
                           return Stack(
                             alignment: Alignment.center,
+                            clipBehavior: Clip.none,
                             children: [
                               if (photo != null && asset != null)
                                 _buildCard(
@@ -576,6 +584,7 @@ class _PickSwipePageState extends State<PickSwipePage>
                                   asset: asset,
                                   photo: photo,
                                   dragOffset: _animation?.value ?? _dragOffset,
+                                  swipeThreshold: _swipeThreshold,
                                   onPanUpdate: _onPanUpdate,
                                   onPanEnd: _onPanEnd,
                                   onDoubleTap: () => _openPreview(photo),
@@ -654,21 +663,28 @@ Widget _buildCard({
   required AssetEntity asset,
   required PickPhoto photo,
   required Offset dragOffset,
+  required double swipeThreshold,
   required GestureDragUpdateCallback onPanUpdate,
   required GestureDragEndCallback onPanEnd,
   required VoidCallback onDoubleTap,
 }) {
   final rotation = dragOffset.dx / size.width * 0.3;
-  final overlay = dragOffset.dx > 0
-      ? '确认'
+  final swipeProgress = (dragOffset.dx.abs() / swipeThreshold).clamp(0.0, 1.0);
+  final isDragging = dragOffset.dx.abs() > 4;
+  final actionLabel = dragOffset.dx > 0
+      ? groupConfirmed
       : dragOffset.dx < 0
-      ? '待删除'
-      : null;
-  final overlayColor = dragOffset.dx > 0
+      ? groupPendingDelete
+      : '';
+  final hintLabel = swipeProgress >= 1
+      ? '松手$actionLabel'
+      : '继续滑动$actionLabel';
+  final baseColor = dragOffset.dx > 0
       ? Colors.green
       : dragOffset.dx < 0
       ? Colors.red
       : Colors.transparent;
+  final overlayColor = baseColor.withOpacity(0.2 + 0.6 * swipeProgress);
   return GestureDetector(
     onPanUpdate: onPanUpdate,
     onPanEnd: onPanEnd,
@@ -678,6 +694,7 @@ Widget _buildCard({
       child: Transform.rotate(
         angle: rotation,
         child: Stack(
+          clipBehavior: Clip.none,
           children: [
             Container(
               width: size.width,
@@ -693,14 +710,16 @@ Widget _buildCard({
                   ),
                 ],
               ),
-              clipBehavior: Clip.antiAlias,
-              child: AssetEntityImage(
-                asset,
-                fit: BoxFit.cover,
-                isOriginal: false,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(20),
+                child: AssetEntityImage(
+                  asset,
+                  fit: BoxFit.cover,
+                  isOriginal: false,
+                ),
               ),
             ),
-            if (overlay != null)
+            if (isDragging)
               Positioned(
                 top: 24,
                 left: dragOffset.dx > 0 ? 24 : null,
@@ -713,15 +732,42 @@ Widget _buildCard({
                       vertical: 8,
                     ),
                     decoration: BoxDecoration(
-                      border: Border.all(color: overlayColor, width: 3),
+                      color: Colors.black.withOpacity(0.08),
+                      border: Border.all(color: baseColor, width: 3),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
-                      overlay,
+                      hintLabel,
                       style: TextStyle(
-                        color: overlayColor,
-                        fontSize: 24,
+                        color: baseColor,
+                        fontSize: 20,
                         fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            if (isDragging)
+              Positioned(
+                left: dragOffset.dx > 0 ? 0 : null,
+                right: dragOffset.dx < 0 ? 0 : null,
+                top: size.height * 0.5 - 20,
+                child: Opacity(
+                  opacity: swipeProgress,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: overlayColor,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      '释放',
+                      style: TextStyle(
+                        color: baseColor,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ),
@@ -957,59 +1003,42 @@ class PickPreviewPage extends StatefulWidget {
 }
 
 class _PickPreviewPageState extends State<PickPreviewPage> {
-  Offset _dragOffset = Offset.zero;
-
-  void _onVerticalDragUpdate(DragUpdateDetails details) {
-    setState(() {
-      _dragOffset += details.delta;
-    });
-  }
-
-  void _onVerticalDragEnd(DragEndDetails details) {
-    if (_dragOffset.dy.abs() > 120) {
-      Navigator.of(context).pop();
-      return;
-    }
-    setState(() {
-      _dragOffset = Offset.zero;
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
-      body: GestureDetector(
-        onVerticalDragUpdate: _onVerticalDragUpdate,
-        onVerticalDragEnd: _onVerticalDragEnd,
-        child: Stack(
-          children: [
-            Positioned.fill(
-              child: Transform.translate(
-                offset: _dragOffset,
-                child: Center(
-                  child: InteractiveViewer(
-                    minScale: 1,
-                    maxScale: 4,
-                    child: AssetEntityImage(
-                      widget.asset,
-                      isOriginal: true,
-                      fit: BoxFit.contain,
-                    ),
-                  ),
-                ),
-              ),
+      body: Stack(
+        children: [
+          Positioned.fill(
+            child: FutureBuilder<Uint8List?>(
+              future: widget.asset.originBytes,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.done &&
+                    snapshot.data != null) {
+                  return PhotoView(
+                    imageProvider: MemoryImage(snapshot.data!),
+                    backgroundDecoration:
+                        const BoxDecoration(color: Colors.black),
+                    minScale: PhotoViewComputedScale.contained,
+                    maxScale: PhotoViewComputedScale.covered * 3.0,
+                  );
+                }
+                if (snapshot.connectionState == ConnectionState.done) {
+                  return const _ImagePlaceholder();
+                }
+                return const _ImageLoadingPlaceholder();
+              },
             ),
-            Positioned(
-              top: 40,
-              left: 16,
-              child: IconButton(
-                onPressed: () => Navigator.of(context).pop(),
-                icon: const Icon(Icons.close, color: Colors.white),
-              ),
+          ),
+          Positioned(
+            top: 40,
+            left: 16,
+            child: IconButton(
+              onPressed: () => Navigator.of(context).pop(),
+              icon: const Icon(Icons.close, color: Colors.white),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
