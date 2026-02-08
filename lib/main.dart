@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 import './pick/pick.dart';
 import './watermark/watermark.dart';
 import './profile/profile.dart';
+import './settings/app_settings.dart';
 
 void main() {
-  runApp(const PhotoLabApp());
+  runApp(AppSettingsScope(settings: AppSettings(), child: const PhotoLabApp()));
 }
 
 class PhotoLabApp extends StatelessWidget {

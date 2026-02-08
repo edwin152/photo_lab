@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import '../settings/app_settings.dart';
 
 class ProfilePage extends StatelessWidget {
   const ProfilePage({super.key});
@@ -17,6 +18,7 @@ class ProfilePage extends StatelessWidget {
         child: Column(
           children: [
             const SizedBox(height: 24),
+            const _PreviewSettingsCard(),
             const Spacer(),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -40,6 +42,40 @@ class ProfilePage extends StatelessWidget {
                   ),
                 );
               },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PreviewSettingsCard extends StatelessWidget {
+  const _PreviewSettingsCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final settings = AppSettingsScope.of(context);
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Column(
+          children: [
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('双击卡片预览'),
+              subtitle: const Text('在评选卡片上双击打开预览'),
+              value: settings.enableDoubleTapPreview,
+              onChanged: settings.setEnableDoubleTapPreview,
+            ),
+            const Divider(height: 1),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('单击卡片预览'),
+              subtitle: const Text('在评选卡片上单击打开预览'),
+              value: settings.enableSingleTapPreview,
+              onChanged: settings.setEnableSingleTapPreview,
             ),
           ],
         ),

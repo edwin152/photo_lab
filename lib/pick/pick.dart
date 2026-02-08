@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:photo_manager/photo_manager.dart';
 import 'package:photo_view/photo_view.dart';
+import '../settings/app_settings.dart';
 
 import 'pick_models.dart';
 import 'pick_repository.dart';
@@ -377,6 +378,8 @@ class _PickSwipePageState extends State<PickSwipePage>
   Offset _dragOffset = Offset.zero;
   late AnimationController _controller;
   Animation<Offset>? _animation;
+  bool _isResetting = false;
+  double _resetStartBackgroundProgress = 0.0;
   static const double _swipeReleaseDistance = 100;
 
   @override
@@ -502,6 +505,12 @@ class _PickSwipePageState extends State<PickSwipePage>
 
   void _animateTo(Offset target, {required VoidCallback onComplete}) {
     _controller.stop();
+    _isResetting = target == Offset.zero;
+    if (_isResetting) {
+      _resetStartBackgroundProgress = (_dragOffset.dx.abs() /
+              _swipeReleaseDistance)
+          .clamp(0.0, 1.0);
+    }
     _animation = Tween<Offset>(
       begin: _dragOffset,
       end: target,
@@ -513,6 +522,7 @@ class _PickSwipePageState extends State<PickSwipePage>
         setState(() {
           _dragOffset = Offset.zero;
           _animation = null;
+          _isResetting = false;
         });
       });
   }
@@ -594,6 +604,13 @@ class _PickSwipePageState extends State<PickSwipePage>
                           final swipeProgress =
                               (activeOffset.dx.abs() / _swipeReleaseDistance)
                                   .clamp(0.0, 1.0);
+                          final backgroundProgress = _isResetting
+                              ? (_resetStartBackgroundProgress +
+                                      (1 - _resetStartBackgroundProgress) *
+                                          _controller.value)
+                                  .clamp(0.0, 1.0)
+                              : swipeProgress;
+                          final settings = AppSettingsScope.of(context);
                           return Stack(
                             alignment: Alignment.center,
                             clipBehavior: Clip.none,
@@ -602,7 +619,7 @@ class _PickSwipePageState extends State<PickSwipePage>
                                 _buildBackgroundCard(
                                   size: size,
                                   asset: nextAsset,
-                                  progress: swipeProgress,
+                                  progress: backgroundProgress,
                                 ),
                               if (photo != null && asset != null)
                                 _buildCard(
@@ -613,7 +630,12 @@ class _PickSwipePageState extends State<PickSwipePage>
                                   swipeThreshold: _swipeReleaseDistance,
                                   onPanUpdate: _onPanUpdate,
                                   onPanEnd: _onPanEnd,
-                                  onDoubleTap: () => _openPreview(photo),
+                                  onDoubleTap: settings.enableDoubleTapPreview
+                                      ? () => _openPreview(photo)
+                                      : null,
+                                  onTap: settings.enableSingleTapPreview
+                                      ? () => _openPreview(photo)
+                                      : null,
                                 )
                               else
                                 const Text('没有更多照片了'),
@@ -692,7 +714,8 @@ Widget _buildCard({
   required double swipeThreshold,
   required GestureDragUpdateCallback onPanUpdate,
   required GestureDragEndCallback onPanEnd,
-  required VoidCallback onDoubleTap,
+  required VoidCallback? onDoubleTap,
+  required VoidCallback? onTap,
 }) {
   final rotation = dragOffset.dx / size.width * 0.3;
   final swipeProgress = (dragOffset.dx.abs() / swipeThreshold).clamp(0.0, 1.0);
@@ -711,6 +734,7 @@ Widget _buildCard({
     onPanUpdate: onPanUpdate,
     onPanEnd: onPanEnd,
     onDoubleTap: onDoubleTap,
+    onTap: onTap,
     child: Transform.translate(
       offset: dragOffset,
       child: Transform.rotate(
@@ -1039,120 +1063,51 @@ class PickPreviewPage extends StatefulWidget {
   State<PickPreviewPage> createState() => _PickPreviewPageState();
 }
 
-class _PickPreviewPageState extends State<PickPreviewPage>
-    with SingleTickerProviderStateMixin {
+class _PickPreviewPageState extends State<PickPreviewPage> {
   late final PhotoViewController _photoController;
-  late final AnimationController _resetController;
-  Offset _dragOffset = Offset.zero;
-  double _dragProgress = 0.0;
-  Offset _resetStartOffset = Offset.zero;
-  double _resetStartProgress = 0.0;
 
   @override
   void initState() {
     super.initState();
     _photoController = PhotoViewController();
-    _resetController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 220),
-    )..addListener(() {
-        setState(() {
-          _dragOffset = Offset.lerp(
-            _resetStartOffset,
-            Offset.zero,
-            _resetController.value,
-          )!;
-          _dragProgress = _resetStartProgress * (1 - _resetController.value);
-        });
-      });
   }
 
   @override
   void dispose() {
     _photoController.dispose();
-    _resetController.dispose();
     super.dispose();
-  }
-
-  bool _canSwipeDismiss() {
-    final scale = _photoController.value.scale ?? 1.0;
-    return scale <= 1.02;
-  }
-
-  void _handleVerticalDragUpdate(DragUpdateDetails details) {
-    if (!_canSwipeDismiss()) {
-      return;
-    }
-    if (_resetController.isAnimating) {
-      _resetController.stop();
-    }
-    final screenHeight = MediaQuery.of(context).size.height;
-    final nextDy = (_dragOffset.dy + details.delta.dy).clamp(0.0, screenHeight);
-    final progress = (nextDy / (screenHeight * 0.55)).clamp(0.0, 1.0);
-    setState(() {
-      _dragOffset = Offset(0, nextDy);
-      _dragProgress = progress;
-    });
-  }
-
-  Future<void> _handleVerticalDragEnd(DragEndDetails details) async {
-    if (!_canSwipeDismiss()) {
-      return;
-    }
-    final velocity = details.primaryVelocity ?? 0.0;
-    final shouldDismiss = _dragProgress > 0.25 || velocity > 900;
-    if (shouldDismiss) {
-      if (!mounted) {
-        return;
-      }
-      Navigator.of(context).pop();
-      return;
-    }
-    _resetStartOffset = _dragOffset;
-    _resetStartProgress = _dragProgress;
-    await _resetController.forward(from: 0.0);
   }
 
   @override
   Widget build(BuildContext context) {
-    final scale = 1.0 - _dragProgress * 0.18;
-    final opacity = 1.0 - _dragProgress * 0.6;
     return Scaffold(
-      backgroundColor: Colors.black.withValues(alpha: opacity.clamp(0.0, 1.0)),
+      backgroundColor: Colors.black,
       body: Stack(
         children: [
           Positioned.fill(
             child: GestureDetector(
               behavior: HitTestBehavior.translucent,
-              onVerticalDragUpdate: _handleVerticalDragUpdate,
-              onVerticalDragEnd: _handleVerticalDragEnd,
-              child: Transform.translate(
-                offset: _dragOffset,
-                child: Transform.scale(
-                  scale: scale,
-                  alignment: Alignment.center,
-                  child: FutureBuilder<Uint8List?>(
-                    future: widget.asset.originBytes,
-                    builder: (context, snapshot) {
-                      if (snapshot.connectionState == ConnectionState.done &&
-                          snapshot.data != null) {
-                        return PhotoView(
-                          controller: _photoController,
-                          imageProvider: MemoryImage(snapshot.data!),
-                          backgroundDecoration: const BoxDecoration(
-                            color: Colors.transparent,
-                          ),
-                          minScale: PhotoViewComputedScale.contained,
-                          maxScale: PhotoViewComputedScale.covered * 3.0,
-                        );
-                      }
-                      if (snapshot.connectionState == ConnectionState.done) {
-                        return const _ImagePlaceholder();
-                      }
-                      return const _ImageLoadingPlaceholder();
-                    },
-                  ),
-                ),
+              onTap: () => Navigator.of(context).pop(),
+              child: FutureBuilder<Uint8List?>(
+                future: widget.asset.originBytes,
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.done &&
+                      snapshot.data != null) {
+                    return PhotoView(
+                      controller: _photoController,
+                      imageProvider: MemoryImage(snapshot.data!),
+                      backgroundDecoration: const BoxDecoration(
+                        color: Colors.transparent,
+                      ),
+                      minScale: PhotoViewComputedScale.contained,
+                      maxScale: PhotoViewComputedScale.covered * 3.0,
+                    );
+                  }
+                  if (snapshot.connectionState == ConnectionState.done) {
+                    return const _ImagePlaceholder();
+                  }
+                  return const _ImageLoadingPlaceholder();
+                },
               ),
             ),
           ),
