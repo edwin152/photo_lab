@@ -728,7 +728,12 @@ Widget _buildCard({
                   BoxShadow(
                     color: shadowColor,
                     blurRadius: 18,
-                    offset: const Offset(0, 10),
+                    offset: const Offset(0, 6),
+                  ),
+                  BoxShadow(
+                    color: shadowColor.withValues(alpha: 0.35),
+                    blurRadius: 12,
+                    offset: const Offset(0, 0),
                   ),
                 ],
               ),
@@ -792,7 +797,12 @@ Widget _buildBackgroundCard({
             BoxShadow(
               color: Colors.black12,
               blurRadius: 10,
-              offset: Offset(0, 6),
+              offset: Offset(0, 4),
+            ),
+            BoxShadow(
+              color: Colors.black12,
+              blurRadius: 8,
+              offset: Offset(0, 0),
             ),
           ],
         ),
@@ -1029,33 +1039,121 @@ class PickPreviewPage extends StatefulWidget {
   State<PickPreviewPage> createState() => _PickPreviewPageState();
 }
 
-class _PickPreviewPageState extends State<PickPreviewPage> {
+class _PickPreviewPageState extends State<PickPreviewPage>
+    with SingleTickerProviderStateMixin {
+  late final PhotoViewController _photoController;
+  late final AnimationController _resetController;
+  Offset _dragOffset = Offset.zero;
+  double _dragProgress = 0.0;
+  Offset _resetStartOffset = Offset.zero;
+  double _resetStartProgress = 0.0;
+
+  @override
+  void initState() {
+    super.initState();
+    _photoController = PhotoViewController();
+    _resetController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 220),
+    )..addListener(() {
+        setState(() {
+          _dragOffset = Offset.lerp(
+            _resetStartOffset,
+            Offset.zero,
+            _resetController.value,
+          )!;
+          _dragProgress = _resetStartProgress * (1 - _resetController.value);
+        });
+      });
+  }
+
+  @override
+  void dispose() {
+    _photoController.dispose();
+    _resetController.dispose();
+    super.dispose();
+  }
+
+  bool _canSwipeDismiss() {
+    final scale = _photoController.value.scale ?? 1.0;
+    return scale <= 1.02;
+  }
+
+  void _handleVerticalDragUpdate(DragUpdateDetails details) {
+    if (!_canSwipeDismiss()) {
+      return;
+    }
+    if (_resetController.isAnimating) {
+      _resetController.stop();
+    }
+    final screenHeight = MediaQuery.of(context).size.height;
+    final nextDy = (_dragOffset.dy + details.delta.dy).clamp(0.0, screenHeight);
+    final progress = (nextDy / (screenHeight * 0.55)).clamp(0.0, 1.0);
+    setState(() {
+      _dragOffset = Offset(0, nextDy);
+      _dragProgress = progress;
+    });
+  }
+
+  Future<void> _handleVerticalDragEnd(DragEndDetails details) async {
+    if (!_canSwipeDismiss()) {
+      return;
+    }
+    final velocity = details.primaryVelocity ?? 0.0;
+    final shouldDismiss = _dragProgress > 0.25 || velocity > 900;
+    if (shouldDismiss) {
+      if (!mounted) {
+        return;
+      }
+      Navigator.of(context).pop();
+      return;
+    }
+    _resetStartOffset = _dragOffset;
+    _resetStartProgress = _dragProgress;
+    await _resetController.forward(from: 0.0);
+  }
+
   @override
   Widget build(BuildContext context) {
+    final scale = 1.0 - _dragProgress * 0.18;
+    final opacity = 1.0 - _dragProgress * 0.6;
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: Colors.black.withValues(alpha: opacity.clamp(0.0, 1.0)),
       body: Stack(
         children: [
           Positioned.fill(
-            child: FutureBuilder<Uint8List?>(
-              future: widget.asset.originBytes,
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.done &&
-                    snapshot.data != null) {
-                  return PhotoView(
-                    imageProvider: MemoryImage(snapshot.data!),
-                    backgroundDecoration: const BoxDecoration(
-                      color: Colors.black,
-                    ),
-                    minScale: PhotoViewComputedScale.contained,
-                    maxScale: PhotoViewComputedScale.covered * 3.0,
-                  );
-                }
-                if (snapshot.connectionState == ConnectionState.done) {
-                  return const _ImagePlaceholder();
-                }
-                return const _ImageLoadingPlaceholder();
-              },
+            child: GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onVerticalDragUpdate: _handleVerticalDragUpdate,
+              onVerticalDragEnd: _handleVerticalDragEnd,
+              child: Transform.translate(
+                offset: _dragOffset,
+                child: Transform.scale(
+                  scale: scale,
+                  alignment: Alignment.center,
+                  child: FutureBuilder<Uint8List?>(
+                    future: widget.asset.originBytes,
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.done &&
+                          snapshot.data != null) {
+                        return PhotoView(
+                          controller: _photoController,
+                          imageProvider: MemoryImage(snapshot.data!),
+                          backgroundDecoration: const BoxDecoration(
+                            color: Colors.transparent,
+                          ),
+                          minScale: PhotoViewComputedScale.contained,
+                          maxScale: PhotoViewComputedScale.covered * 3.0,
+                        );
+                      }
+                      if (snapshot.connectionState == ConnectionState.done) {
+                        return const _ImagePlaceholder();
+                      }
+                      return const _ImageLoadingPlaceholder();
+                    },
+                  ),
+                ),
+              ),
             ),
           ),
           Positioned(
@@ -1089,6 +1187,7 @@ class AssetEntityImage extends StatefulWidget {
 }
 
 class _AssetEntityImageState extends State<AssetEntityImage> {
+  static final Map<String, Uint8List> _thumbnailCache = {};
   late Future<Uint8List?> _future;
 
   @override
@@ -1107,9 +1206,21 @@ class _AssetEntityImageState extends State<AssetEntityImage> {
   }
 
   Future<Uint8List?> _loadBytes() {
-    return widget.isOriginal
-        ? widget.asset.originBytes
-        : widget.asset.thumbnailDataWithSize(const ThumbnailSize.square(500));
+    if (widget.isOriginal) {
+      return widget.asset.originBytes;
+    }
+    final cached = _thumbnailCache[widget.asset.id];
+    if (cached != null) {
+      return Future.value(cached);
+    }
+    return widget.asset
+        .thumbnailDataWithSize(const ThumbnailSize.square(500))
+        .then((bytes) {
+      if (bytes != null) {
+        _thumbnailCache[widget.asset.id] = bytes;
+      }
+      return bytes;
+    });
   }
 
   @override
