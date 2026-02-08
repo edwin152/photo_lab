@@ -1,19 +1,9 @@
 import 'package:flutter/material.dart';
 
 class AppSettings extends ChangeNotifier {
-  bool _enableDoubleTapPreview = true;
   bool _enableSingleTapPreview = false;
 
-  bool get enableDoubleTapPreview => _enableDoubleTapPreview;
   bool get enableSingleTapPreview => _enableSingleTapPreview;
-
-  void setEnableDoubleTapPreview(bool value) {
-    if (_enableDoubleTapPreview == value) {
-      return;
-    }
-    _enableDoubleTapPreview = value;
-    notifyListeners();
-  }
 
   void setEnableSingleTapPreview(bool value) {
     if (_enableSingleTapPreview == value) {

@@ -64,16 +64,12 @@ class _PreviewSettingsCard extends StatelessWidget {
           children: [
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
-              title: const Text('双击卡片预览'),
-              subtitle: const Text('在评选卡片上双击打开预览'),
-              value: settings.enableDoubleTapPreview,
-              onChanged: settings.setEnableDoubleTapPreview,
-            ),
-            const Divider(height: 1),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
               title: const Text('单击卡片预览'),
-              subtitle: const Text('在评选卡片上单击打开预览'),
+              subtitle: Text(
+                settings.enableSingleTapPreview
+                    ? '已启用单击预览'
+                    : '关闭时改为双击预览',
+              ),
               value: settings.enableSingleTapPreview,
               onChanged: settings.setEnableSingleTapPreview,
             ),
