@@ -1,4 +1,5 @@
 import 'dart:math';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:photo_manager/photo_manager.dart';
@@ -167,8 +168,9 @@ class _PickPageState extends State<PickPage> {
   @override
   Widget build(BuildContext context) {
     final totalCount = _photos.length;
-    final ungroupedCount =
-        _photos.where((photo) => photo.groupName == null).length;
+    final ungroupedCount = _photos
+        .where((photo) => photo.groupName == null)
+        .length;
     final groupedCount = totalCount - ungroupedCount;
     return Scaffold(
       appBar: AppBar(
@@ -184,59 +186,55 @@ class _PickPageState extends State<PickPage> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _permissionDenied
-              ? const _PermissionHint()
-              : _session == null
-                  ? _EmptyState(onPick: _openSelection)
-                  : RefreshIndicator(
-                      onRefresh: _refreshData,
-                      child: ListView(
-                        padding: const EdgeInsets.all(16),
-                        children: [
-                          _SectionTitle(title: '筛选入口'),
-                          _EntryTile(
-                            title: '全部',
-                            subtitle: '共 $totalCount 张',
-                            icon: Icons.photo,
-                            onTap: () => _openSwipe(const PickFilter.all()),
-                          ),
-                          _EntryTile(
-                            title: '未分组',
-                            subtitle: '待处理 $ungroupedCount 张',
-                            icon: Icons.filter_none,
-                            onTap: () =>
-                                _openSwipe(const PickFilter.ungrouped()),
-                          ),
-                          _EntryTile(
-                            title: '已分组',
-                            subtitle: '共 $groupedCount 张',
-                            icon: Icons.folder_open,
-                            onTap: () =>
-                                _openSwipe(const PickFilter.grouped()),
-                          ),
-                          const SizedBox(height: 16),
-                          _SectionTitle(title: '分组列表'),
-                          if (_groupSummaries.isEmpty)
-                            const _EmptyGroupHint()
-                          else
-                            ..._groupSummaries.map(
-                              (group) => _EntryTile(
-                                title: group.groupName,
-                                subtitle: '${group.count} 张',
-                                icon: group.groupName == groupPendingDelete
-                                    ? Icons.delete_outline
-                                    : Icons.bookmark_outline,
-                                onTap: () => _openSwipe(
-                                  PickFilter.group(group.groupName),
-                                ),
-                                onLongPress:
-                                    group.groupName == groupPendingDelete
-                                        ? _confirmDeletePending
-                                        : null,
-                              ),
-                            ),
-                        ],
+          ? const _PermissionHint()
+          : _session == null
+          ? _EmptyState(onPick: _openSelection)
+          : RefreshIndicator(
+              onRefresh: _refreshData,
+              child: ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  _SectionTitle(title: '筛选入口'),
+                  _EntryTile(
+                    title: '全部',
+                    subtitle: '共 $totalCount 张',
+                    icon: Icons.photo,
+                    onTap: () => _openSwipe(const PickFilter.all()),
+                  ),
+                  _EntryTile(
+                    title: '未分组',
+                    subtitle: '待处理 $ungroupedCount 张',
+                    icon: Icons.filter_none,
+                    onTap: () => _openSwipe(const PickFilter.ungrouped()),
+                  ),
+                  _EntryTile(
+                    title: '已分组',
+                    subtitle: '共 $groupedCount 张',
+                    icon: Icons.folder_open,
+                    onTap: () => _openSwipe(const PickFilter.grouped()),
+                  ),
+                  const SizedBox(height: 16),
+                  _SectionTitle(title: '分组列表'),
+                  if (_groupSummaries.isEmpty)
+                    const _EmptyGroupHint()
+                  else
+                    ..._groupSummaries.map(
+                      (group) => _EntryTile(
+                        title: group.groupName,
+                        subtitle: '${group.count} 张',
+                        icon: group.groupName == groupPendingDelete
+                            ? Icons.delete_outline
+                            : Icons.bookmark_outline,
+                        onTap: () =>
+                            _openSwipe(PickFilter.group(group.groupName)),
+                        onLongPress: group.groupName == groupPendingDelete
+                            ? _confirmDeletePending
+                            : null,
                       ),
                     ),
+                ],
+              ),
+            ),
     );
   }
 }
@@ -249,10 +247,7 @@ class _PermissionHint extends StatelessWidget {
     return const Center(
       child: Padding(
         padding: EdgeInsets.all(24),
-        child: Text(
-          '需要访问相册权限才能进行评选，请在系统设置中开启。',
-          textAlign: TextAlign.center,
-        ),
+        child: Text('需要访问相册权限才能进行评选，请在系统设置中开启。', textAlign: TextAlign.center),
       ),
     );
   }
@@ -273,10 +268,7 @@ class _EmptyState extends StatelessWidget {
           const SizedBox(height: 16),
           const Text('暂无正在评选的照片'),
           const SizedBox(height: 16),
-          FilledButton(
-            onPressed: onPick,
-            child: const Text('选择照片开始评选'),
-          ),
+          FilledButton(onPressed: onPick, child: const Text('选择照片开始评选')),
         ],
       ),
     );
@@ -292,10 +284,7 @@ class _SectionTitle extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
-      child: Text(
-        title,
-        style: Theme.of(context).textTheme.titleMedium,
-      ),
+      child: Text(title, style: Theme.of(context).textTheme.titleMedium),
     );
   }
 }
@@ -353,7 +342,7 @@ class PickFilter {
   const PickFilter.grouped() : this._(PickFilterType.grouped, null);
 
   const PickFilter.group(String groupName)
-      : this._(PickFilterType.group, groupName);
+    : this._(PickFilterType.group, groupName);
 
   final PickFilterType type;
   final String? groupName;
@@ -418,7 +407,10 @@ class _PickSwipePageState extends State<PickSwipePage>
       }
     }).toList();
     final assetIds = filtered.map((photo) => photo.assetId).toList();
-    final assets = await PhotoManager.getAssetListWithIds(assetIds);
+    final assetFutures = assetIds.map((id) => AssetEntity.fromId(id));
+    final assets = (await Future.wait(
+      assetFutures,
+    )).whereType<AssetEntity>().toList();
     for (final asset in assets) {
       _assets[asset.id] = asset;
     }
@@ -458,9 +450,11 @@ class _PickSwipePageState extends State<PickSwipePage>
     );
     setState(() {
       _photos = _photos
-          .map((item) => item.id == photo.id
-              ? item.copyWith(groupName: groupName)
-              : item)
+          .map(
+            (item) => item.id == photo.id
+                ? item.copyWith(groupName: groupName)
+                : item,
+          )
           .toList();
     });
   }
@@ -480,9 +474,11 @@ class _PickSwipePageState extends State<PickSwipePage>
     }
     setState(() {
       _photos = _photos
-          .map((item) => item.id == last.photoId
-              ? item.copyWith(groupName: last.previousGroup)
-              : item)
+          .map(
+            (item) => item.id == last.photoId
+                ? item.copyWith(groupName: last.previousGroup)
+                : item,
+          )
           .toList();
       _dragOffset = Offset.zero;
     });
@@ -490,9 +486,10 @@ class _PickSwipePageState extends State<PickSwipePage>
 
   void _animateTo(Offset target, {required VoidCallback onComplete}) {
     _controller.stop();
-    _animation = Tween<Offset>(begin: _dragOffset, end: target).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeOut),
-    );
+    _animation = Tween<Offset>(
+      begin: _dragOffset,
+      end: target,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));
     _controller
       ..reset()
       ..forward().whenComplete(() {
@@ -532,11 +529,9 @@ class _PickSwipePageState extends State<PickSwipePage>
     if (asset == null) {
       return;
     }
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => PickPreviewPage(asset: asset),
-      ),
-    );
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => PickPreviewPage(asset: asset)));
   }
 
   @override
@@ -559,45 +554,44 @@ class _PickSwipePageState extends State<PickSwipePage>
         body: _loading
             ? const Center(child: CircularProgressIndicator())
             : _photos.isEmpty
-                ? const _EmptyGroupHint()
-                : Column(
-                    children: [
-                      Expanded(
-                        child: Center(
-                          child: LayoutBuilder(
-                            builder: (context, constraints) {
-                              final size = Size(
-                                min(constraints.maxWidth, 360),
-                                min(constraints.maxHeight, 520),
-                              );
-                              return Stack(
-                                alignment: Alignment.center,
-                                children: [
-                                  if (photo != null && asset != null)
-                                    _buildCard(
-                                      size: size,
-                                      asset: asset,
-                                      photo: photo,
-                                      dragOffset: _animation?.value ??
-                                          _dragOffset,
-                                      onPanUpdate: _onPanUpdate,
-                                      onPanEnd: _onPanEnd,
-                                      onDoubleTap: () => _openPreview(photo),
-                                    )
-                                  else
-                                    const Text('没有更多照片了'),
-                                ],
-                              );
-                            },
-                          ),
-                        ),
+            ? const _EmptyGroupHint()
+            : Column(
+                children: [
+                  Expanded(
+                    child: Center(
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          final size = Size(
+                            min(constraints.maxWidth, 360),
+                            min(constraints.maxHeight, 520),
+                          );
+                          return Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              if (photo != null && asset != null)
+                                _buildCard(
+                                  size: size,
+                                  asset: asset,
+                                  photo: photo,
+                                  dragOffset: _animation?.value ?? _dragOffset,
+                                  onPanUpdate: _onPanUpdate,
+                                  onPanEnd: _onPanEnd,
+                                  onDoubleTap: () => _openPreview(photo),
+                                )
+                              else
+                                const Text('没有更多照片了'),
+                            ],
+                          );
+                        },
                       ),
-                      _SwipeActionsBar(
-                        onUndo: _actions.isEmpty ? null : _undo,
-                        remaining: _photos.length - _actions.length,
-                      ),
-                    ],
+                    ),
                   ),
+                  _SwipeActionsBar(
+                    onUndo: _actions.isEmpty ? null : _undo,
+                    remaining: _photos.length - _actions.length,
+                  ),
+                ],
+              ),
       ),
     );
   }
@@ -666,13 +660,13 @@ Widget _buildCard({
   final overlay = dragOffset.dx > 0
       ? '确认'
       : dragOffset.dx < 0
-          ? '待删除'
-          : null;
+      ? '待删除'
+      : null;
   final overlayColor = dragOffset.dx > 0
       ? Colors.green
       : dragOffset.dx < 0
-          ? Colors.red
-          : Colors.transparent;
+      ? Colors.red
+      : Colors.transparent;
   return GestureDetector(
     onPanUpdate: onPanUpdate,
     onPanEnd: onPanEnd,
@@ -712,8 +706,10 @@ Widget _buildCard({
                 child: Transform.rotate(
                   angle: dragOffset.dx > 0 ? -0.2 : 0.2,
                   child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
                     decoration: BoxDecoration(
                       border: Border.all(color: overlayColor, width: 3),
                       borderRadius: BorderRadius.circular(12),
@@ -757,6 +753,14 @@ class _PickSelectionPageState extends State<PickSelectionPage> {
   }
 
   Future<void> _loadAlbums() async {
+    final permission = await PhotoManager.requestPermissionExtend();
+    if (!permission.isAuth) {
+      if (!mounted) {
+        return;
+      }
+      Navigator.of(context).pop();
+      return;
+    }
     final albums = await PhotoManager.getAssetPathList(
       type: RequestType.image,
       onlyAll: false,
@@ -954,6 +958,38 @@ class _PickPreviewPageState extends State<PickPreviewPage> {
           ],
         ),
       ),
+    );
+  }
+}
+
+class AssetEntityImage extends StatelessWidget {
+  final AssetEntity asset;
+  final BoxFit? fit;
+  final bool isOriginal;
+
+  const AssetEntityImage(
+    this.asset, {
+    super.key,
+    this.fit,
+    required this.isOriginal,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<Uint8List?>(
+      future: isOriginal
+          ? asset.originBytes
+          : asset.thumbnailDataWithSize(const ThumbnailSize.square(500)),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.done &&
+            snapshot.data != null) {
+          return Image.memory(snapshot.data!, fit: fit ?? BoxFit.cover);
+        }
+        return Container(
+          color: Colors.grey.shade200,
+          child: const Center(child: CircularProgressIndicator()),
+        );
+      },
     );
   }
 }
