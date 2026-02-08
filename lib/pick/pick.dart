@@ -561,9 +561,11 @@ class _PickSwipePageState extends State<PickSwipePage>
                     child: Center(
                       child: LayoutBuilder(
                         builder: (context, constraints) {
+                          final maxWidth = max(0.0, constraints.maxWidth - 32);
+                          final maxHeight = max(0.0, constraints.maxHeight - 32);
                           final size = Size(
-                            min(constraints.maxWidth, 360),
-                            min(constraints.maxHeight, 520),
+                            min(maxWidth, 360),
+                            min(maxHeight, 520),
                           );
                           return Stack(
                             alignment: Alignment.center,
@@ -743,8 +745,10 @@ class _PickSelectionPageState extends State<PickSelectionPage> {
   List<AssetPathEntity> _albums = [];
   AssetPathEntity? _currentAlbum;
   List<AssetEntity> _assets = [];
+  List<AssetEntity> _sourceAssets = [];
   final Set<String> _selected = {};
   bool _loading = true;
+  bool _ascending = false;
 
   @override
   void initState() {
@@ -779,6 +783,7 @@ class _PickSelectionPageState extends State<PickSelectionPage> {
     if (_currentAlbum == null) {
       setState(() {
         _assets = [];
+        _sourceAssets = [];
         _loading = false;
       });
       return;
@@ -791,9 +796,14 @@ class _PickSelectionPageState extends State<PickSelectionPage> {
       return;
     }
     setState(() {
-      _assets = assets;
+      _sourceAssets = assets;
+      _assets = _applyOrder(assets);
       _loading = false;
     });
+  }
+
+  List<AssetEntity> _applyOrder(List<AssetEntity> assets) {
+    return _ascending ? assets.reversed.toList() : List.of(assets);
   }
 
   void _toggleSelection(String assetId) {
@@ -802,6 +812,25 @@ class _PickSelectionPageState extends State<PickSelectionPage> {
         _selected.remove(assetId);
       } else {
         _selected.add(assetId);
+      }
+    });
+  }
+
+  void _toggleOrder() {
+    setState(() {
+      _ascending = !_ascending;
+      _assets = _applyOrder(_sourceAssets);
+    });
+  }
+
+  void _toggleSelectAll() {
+    setState(() {
+      if (_assets.isNotEmpty && _selected.length == _assets.length) {
+        _selected.clear();
+      } else {
+        _selected
+          ..clear()
+          ..addAll(_assets.map((asset) => asset.id));
       }
     });
   }
@@ -816,6 +845,13 @@ class _PickSelectionPageState extends State<PickSelectionPage> {
       appBar: AppBar(
         title: const Text('选择照片'),
         actions: [
+          IconButton(
+            tooltip: _ascending ? '按时间倒序' : '按时间正序',
+            icon: Icon(
+              _ascending ? Icons.arrow_upward : Icons.arrow_downward,
+            ),
+            onPressed: _assets.isEmpty ? null : _toggleOrder,
+          ),
           if (_albums.isNotEmpty)
             DropdownButtonHideUnderline(
               child: DropdownButton<AssetPathEntity>(
@@ -840,6 +876,8 @@ class _PickSelectionPageState extends State<PickSelectionPage> {
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
+          : _assets.isEmpty
+          ? const Center(child: Text('当前相册没有照片'))
           : GridView.builder(
               padding: const EdgeInsets.all(12),
               gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -884,9 +922,24 @@ class _PickSelectionPageState extends State<PickSelectionPage> {
       bottomNavigationBar: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(16),
-          child: FilledButton(
-            onPressed: _selected.isEmpty ? null : _submit,
-            child: Text('开始评选（${_selected.length}）'),
+          child: Row(
+            children: [
+              TextButton(
+                onPressed: _assets.isEmpty ? null : _toggleSelectAll,
+                child: Text(
+                  _selected.length == _assets.length && _assets.isNotEmpty
+                      ? '取消全选'
+                      : '全选',
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: FilledButton(
+                  onPressed: _selected.isEmpty ? null : _submit,
+                  child: Text('开始评选（${_selected.length}）'),
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -962,7 +1015,7 @@ class _PickPreviewPageState extends State<PickPreviewPage> {
   }
 }
 
-class AssetEntityImage extends StatelessWidget {
+class AssetEntityImage extends StatefulWidget {
   final AssetEntity asset;
   final BoxFit? fit;
   final bool isOriginal;
@@ -975,21 +1028,77 @@ class AssetEntityImage extends StatelessWidget {
   });
 
   @override
+  State<AssetEntityImage> createState() => _AssetEntityImageState();
+}
+
+class _AssetEntityImageState extends State<AssetEntityImage> {
+  late Future<Uint8List?> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = _loadBytes();
+  }
+
+  @override
+  void didUpdateWidget(covariant AssetEntityImage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.asset.id != widget.asset.id ||
+        oldWidget.isOriginal != widget.isOriginal) {
+      _future = _loadBytes();
+    }
+  }
+
+  Future<Uint8List?> _loadBytes() {
+    return widget.isOriginal
+        ? widget.asset.originBytes
+        : widget.asset.thumbnailDataWithSize(const ThumbnailSize.square(500));
+  }
+
+  @override
   Widget build(BuildContext context) {
     return FutureBuilder<Uint8List?>(
-      future: isOriginal
-          ? asset.originBytes
-          : asset.thumbnailDataWithSize(const ThumbnailSize.square(500)),
+      future: _future,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.done &&
             snapshot.data != null) {
-          return Image.memory(snapshot.data!, fit: fit ?? BoxFit.cover);
+          return Image.memory(
+            snapshot.data!,
+            fit: widget.fit ?? BoxFit.cover,
+            gaplessPlayback: true,
+          );
         }
-        return Container(
-          color: Colors.grey.shade200,
-          child: const Center(child: CircularProgressIndicator()),
-        );
+        if (snapshot.connectionState == ConnectionState.done) {
+          return const _ImagePlaceholder();
+        }
+        return const _ImageLoadingPlaceholder();
       },
+    );
+  }
+}
+
+class _ImageLoadingPlaceholder extends StatelessWidget {
+  const _ImageLoadingPlaceholder();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: Colors.grey.shade200,
+      child: const Center(child: CircularProgressIndicator()),
+    );
+  }
+}
+
+class _ImagePlaceholder extends StatelessWidget {
+  const _ImagePlaceholder();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: Colors.grey.shade200,
+      child: const Center(
+        child: Icon(Icons.broken_image_outlined, color: Colors.black45),
+      ),
     );
   }
 }
