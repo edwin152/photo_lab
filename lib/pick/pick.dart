@@ -193,7 +193,9 @@ class _PickPageState extends State<PickPage> {
       setState(() {
         _scoreCompleted = i + 1;
         _photos = _photos
-            .map((item) => item.id == photo.id ? item.copyWith(tag1: score) : item)
+            .map(
+              (item) => item.id == photo.id ? item.copyWith(tag1: score) : item,
+            )
             .toList();
       });
       await Future<void>.delayed(const Duration(milliseconds: 40));
@@ -235,82 +237,120 @@ class _PickPageState extends State<PickPage> {
           ? const _PermissionHint()
           : _session == null
           ? _EmptyState(onPick: _openSelection)
-          : RefreshIndicator(
-              onRefresh: _refreshData,
-              child: ListView(
-                padding: const EdgeInsets.all(16),
-                children: [
-                  _SectionTitle(title: '筛选入口'),
-                  _EntryTile(
-                    title: '全部',
-                    subtitle: '共 $totalCount 张',
-                    icon: Icons.photo,
-                    onTap: () => _openSwipe(const PickFilter.all()),
-                  ),
-                  _EntryTile(
-                    title: '未分组',
-                    subtitle: '待处理 $ungroupedCount 张',
-                    icon: Icons.filter_none,
-                    onTap: () => _openSwipe(const PickFilter.ungrouped()),
-                  ),
-                  _EntryTile(
-                    title: '已分组',
-                    subtitle: '共 $groupedCount 张',
-                    icon: Icons.folder_open,
-                    onTap: () => _openSwipe(const PickFilter.grouped()),
-                  ),
-                  const SizedBox(height: 16),
-                  _SectionTitle(title: '分组列表'),
-                  if (_groupSummaries.isEmpty)
-                    const EmptyGroupHint()
-                  else
-                    ..._groupSummaries.map(
-                      (group) => _EntryTile(
-                        title: group.groupName,
-                        subtitle: group.groupName == groupPendingDelete
-                            ? '${group.count} 张 · 长按删除照片'
-                            : '${group.count} 张',
-                        icon: group.groupName == groupPendingDelete
-                            ? Icons.delete_outline
-                            : Icons.bookmark_outline,
-                        onTap: () =>
-                            _openSwipe(PickFilter.group(group.groupName)),
-                        onLongPress: group.groupName == groupPendingDelete
-                            ? _confirmDeletePending
-                            : null,
+          : Stack(
+              children: [
+                RefreshIndicator(
+                  onRefresh: _refreshData,
+                  child: ListView(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+                    children: [
+                      _SectionTitle(title: '筛选入口'),
+                      _EntryTile(
+                        title: '全部',
+                        subtitle: '共 $totalCount 张',
+                        icon: Icons.photo,
+                        onTap: () => _openSwipe(const PickFilter.all()),
                       ),
-                    ),
-                  const SizedBox(height: 16),
-                  _SectionTitle(title: 'AI 评分分组'),
-                  if (scoreBuckets.every((bucket) => bucket.count == 0))
-                    const EmptyGroupHint()
-                  else
-                    ...scoreBuckets.map(
-                      (bucket) => _EntryTile(
-                        title: bucket.label,
-                        subtitle: '${bucket.count} 张',
-                        icon: Icons.auto_awesome,
-                        onTap: bucket.count == 0
-                            ? null
-                            : () => _openSwipe(
-                                  PickFilter.scoreRange(
-                                    label: bucket.label,
-                                    minScore: bucket.minScore,
-                                    maxScore: bucket.maxScore,
-                                  ),
+                      _EntryTile(
+                        title: '未分组',
+                        subtitle: '待处理 $ungroupedCount 张',
+                        icon: Icons.filter_none,
+                        onTap: () => _openSwipe(const PickFilter.ungrouped()),
+                      ),
+                      _EntryTile(
+                        title: '已分组',
+                        subtitle: '共 $groupedCount 张',
+                        icon: Icons.folder_open,
+                        onTap: () => _openSwipe(const PickFilter.grouped()),
+                      ),
+                      const SizedBox(height: 16),
+                      _SectionTitle(title: '分组列表'),
+                      if (_groupSummaries.isEmpty)
+                        const EmptyGroupHint()
+                      else
+                        ..._groupSummaries.map(
+                          (group) => _EntryTile(
+                            title: group.groupName,
+                            subtitle: group.groupName == groupPendingDelete
+                                ? '${group.count} 张 · 长按删除照片'
+                                : '${group.count} 张',
+                            icon: group.groupName == groupPendingDelete
+                                ? Icons.delete_outline
+                                : Icons.bookmark_outline,
+                            onTap: () =>
+                                _openSwipe(PickFilter.group(group.groupName)),
+                            onLongPress: group.groupName == groupPendingDelete
+                                ? _confirmDeletePending
+                                : null,
+                            backgroundColor: group.groupName == groupConfirmed
+                                ? Colors.green.withValues(alpha: 0.3)
+                                : group.groupName == groupPendingDelete
+                                ? Colors.red.withValues(alpha: 0.3)
+                                : null,
+                          ),
+                        ),
+                      const SizedBox(height: 16),
+                      _SectionTitle(title: 'AI 评分分组'),
+                      if (scoreBuckets.every((bucket) => bucket.count == 0))
+                        const EmptyGroupHint()
+                      else
+                        ...scoreBuckets.where((bucket) => bucket.count > 0).map(
+                          (bucket) {
+                            return _EntryTile(
+                              title: bucket.label,
+                              subtitle: '',
+                              icon: Icons.auto_awesome,
+                              onTap: () => _openSwipe(
+                                PickFilter.scoreRange(
+                                  label: bucket.label,
+                                  minScore: bucket.minScore,
+                                  maxScore: bucket.maxScore,
                                 ),
+                              ),
+                              customSubtitle: _buildScoreBucketSubtitle(
+                                ungroupedCount: bucket.ungroupedCount,
+                                confirmedCount: bucket.confirmedCount,
+                                pendingDeleteCount: bucket.pendingDeleteCount,
+                                totalCount: bucket.count,
+                              ),
+                            );
+                          },
+                        ),
+                    ],
+                  ),
+                ),
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).scaffoldBackgroundColor,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.1),
+                          blurRadius: 8,
+                          offset: const Offset(0, -2),
+                        ),
+                      ],
+                    ),
+                    child: SafeArea(
+                      top: false,
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: _AiScoreActionCard(
+                          scoring: _scoring,
+                          completed: _scoreCompleted,
+                          total: _scoreTotal,
+                          onPressed: _scoring || _photos.isEmpty
+                              ? null
+                              : _runAiScore,
+                        ),
                       ),
                     ),
-                  const SizedBox(height: 16),
-                  _AiScoreActionCard(
-                    scoring: _scoring,
-                    completed: _scoreCompleted,
-                    total: _scoreTotal,
-                    onPressed:
-                        _scoring || _photos.isEmpty ? null : _runAiScore,
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
     );
   }
@@ -328,37 +368,60 @@ List<_ScoreBucket> _buildScoreBuckets({
     const _ScoreBucket(label: '5', minScore: 81, maxScore: 100),
   ];
   if (advanced) {
-    return ranges
-        .map(
-          (bucket) => bucket.copyWith(
-            label: '${bucket.minScore}-${bucket.maxScore}',
-            count: _countScoreInRange(
-              photos,
-              bucket.minScore,
-              bucket.maxScore,
-            ),
-          ),
-        )
-        .toList();
+    return ranges.map((bucket) {
+      final stats = _countScoreInRangeByGroup(
+        photos,
+        bucket.minScore,
+        bucket.maxScore,
+      );
+      return bucket.copyWith(
+        label: '${bucket.minScore}-${bucket.maxScore}',
+        count: stats['total']!,
+        ungroupedCount: stats['ungrouped']!,
+        confirmedCount: stats['confirmed']!,
+        pendingDeleteCount: stats['pendingDelete']!,
+      );
+    }).toList();
   }
-  return ranges
-      .map(
-        (bucket) => bucket.copyWith(
-          count: _countScoreInRange(photos, bucket.minScore, bucket.maxScore),
-        ),
-      )
-      .toList();
+  return ranges.map((bucket) {
+    final stats = _countScoreInRangeByGroup(
+      photos,
+      bucket.minScore,
+      bucket.maxScore,
+    );
+    return bucket.copyWith(
+      count: stats['total']!,
+      ungroupedCount: stats['ungrouped']!,
+      confirmedCount: stats['confirmed']!,
+      pendingDeleteCount: stats['pendingDelete']!,
+    );
+  }).toList();
 }
 
-int _countScoreInRange(List<PickPhoto> photos, int minScore, int maxScore) {
-  return photos
-      .where(
-        (photo) =>
-            photo.tag1 != null &&
-            photo.tag1! >= minScore &&
-            photo.tag1! <= maxScore,
-      )
+Map<String, int> _countScoreInRangeByGroup(
+  List<PickPhoto> photos,
+  int minScore,
+  int maxScore,
+) {
+  final inRange = photos.where(
+    (photo) =>
+        photo.tag1 != null &&
+        photo.tag1! >= minScore &&
+        photo.tag1! <= maxScore,
+  );
+  final ungrouped = inRange.where((photo) => photo.groupName == null).length;
+  final confirmed = inRange
+      .where((photo) => photo.groupName == groupConfirmed)
       .length;
+  final pendingDelete = inRange
+      .where((photo) => photo.groupName == groupPendingDelete)
+      .length;
+  return {
+    'total': inRange.length,
+    'ungrouped': ungrouped,
+    'confirmed': confirmed,
+    'pendingDelete': pendingDelete,
+  };
 }
 
 class _PermissionHint extends StatelessWidget {
@@ -418,6 +481,8 @@ class _EntryTile extends StatelessWidget {
     required this.icon,
     this.onTap,
     this.onLongPress,
+    this.backgroundColor,
+    this.customSubtitle,
   });
 
   final String title;
@@ -425,15 +490,18 @@ class _EntryTile extends StatelessWidget {
   final IconData icon;
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
+  final Color? backgroundColor;
+  final Widget? customSubtitle;
 
   @override
   Widget build(BuildContext context) {
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 6),
+      color: backgroundColor,
       child: ListTile(
         leading: Icon(icon),
         title: Text(title),
-        subtitle: Text(subtitle),
+        subtitle: customSubtitle ?? Text(subtitle),
         trailing: const Icon(Icons.chevron_right),
         onTap: onTap,
         onLongPress: onLongPress,
@@ -442,28 +510,88 @@ class _EntryTile extends StatelessWidget {
   }
 }
 
+Widget _buildScoreBucketSubtitle({
+  required int ungroupedCount,
+  required int confirmedCount,
+  required int pendingDeleteCount,
+  required int totalCount,
+}) {
+  final spans = <InlineSpan>[];
+
+  if (ungroupedCount > 0) {
+    spans.add(
+      TextSpan(
+        text: '$ungroupedCount 未确认',
+        style: const TextStyle(color: Colors.grey),
+      ),
+    );
+  }
+
+  if (confirmedCount > 0) {
+    if (spans.isNotEmpty) {
+      spans.add(const TextSpan(text: ' · '));
+    }
+    spans.add(
+      TextSpan(
+        text: '$confirmedCount 已确认',
+        style: const TextStyle(color: Colors.green),
+      ),
+    );
+  }
+
+  if (pendingDeleteCount > 0) {
+    if (spans.isNotEmpty) {
+      spans.add(const TextSpan(text: ' · '));
+    }
+    spans.add(
+      TextSpan(
+        text: '$pendingDeleteCount 待删除',
+        style: const TextStyle(color: Colors.red),
+      ),
+    );
+  }
+
+  if (spans.isEmpty) {
+    return Text('$totalCount 张');
+  }
+
+  return Text.rich(TextSpan(children: spans));
+}
+
 class _ScoreBucket {
   const _ScoreBucket({
     required this.label,
     required this.minScore,
     required this.maxScore,
     this.count = 0,
+    this.ungroupedCount = 0,
+    this.confirmedCount = 0,
+    this.pendingDeleteCount = 0,
   });
 
   final String label;
   final int minScore;
   final int maxScore;
   final int count;
+  final int ungroupedCount;
+  final int confirmedCount;
+  final int pendingDeleteCount;
 
   _ScoreBucket copyWith({
     String? label,
     int? count,
+    int? ungroupedCount,
+    int? confirmedCount,
+    int? pendingDeleteCount,
   }) {
     return _ScoreBucket(
       label: label ?? this.label,
       minScore: minScore,
       maxScore: maxScore,
       count: count ?? this.count,
+      ungroupedCount: ungroupedCount ?? this.ungroupedCount,
+      confirmedCount: confirmedCount ?? this.confirmedCount,
+      pendingDeleteCount: pendingDeleteCount ?? this.pendingDeleteCount,
     );
   }
 }
@@ -484,36 +612,29 @@ class _AiScoreActionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final progress = total == 0 ? 0.0 : completed / total;
-    return Card(
-      margin: const EdgeInsets.symmetric(vertical: 6),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              'AI 评分',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 8),
-            if (scoring)
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text('评分中：$completed / $total'),
-                  const SizedBox(height: 8),
-                  LinearProgressIndicator(value: progress),
-                ],
-              )
-            else
-              FilledButton.icon(
-                onPressed: onPressed,
-                icon: const Icon(Icons.auto_awesome),
-                label: const Text('开始 AI 评分'),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (scoring)
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                '评分中：$completed / $total',
+                style: Theme.of(context).textTheme.bodyMedium,
               ),
-          ],
-        ),
-      ),
+              const SizedBox(height: 8),
+              LinearProgressIndicator(value: progress),
+            ],
+          )
+        else
+          FilledButton.icon(
+            onPressed: onPressed,
+            icon: const Icon(Icons.auto_awesome),
+            label: const Text('开始 AI 评分'),
+          ),
+      ],
     );
   }
 }

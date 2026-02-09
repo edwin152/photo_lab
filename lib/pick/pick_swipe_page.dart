@@ -34,11 +34,11 @@ class PickFilter {
     required int minScore,
     required int maxScore,
   }) : this._(
-        PickFilterType.scoreRange,
-        scoreLabel: label,
-        minScore: minScore,
-        maxScore: maxScore,
-      );
+         PickFilterType.scoreRange,
+         scoreLabel: label,
+         minScore: minScore,
+         maxScore: maxScore,
+       );
 
   final PickFilterType type;
   final String? groupName;
@@ -120,7 +120,7 @@ class _PickSwipePageState extends State<PickSwipePage>
   }
 
   Future<void> _loadAssets() async {
-    final filtered = widget.allPhotos.where((photo) {
+    var filtered = widget.allPhotos.where((photo) {
       switch (widget.filter.type) {
         case PickFilterType.all:
           return true;
@@ -139,6 +139,17 @@ class _PickSwipePageState extends State<PickSwipePage>
               score <= (widget.filter.maxScore ?? 100);
       }
     }).toList();
+
+    // 对于AI评分分组，如果有未确认的照片，只展示未确认的
+    if (widget.filter.type == PickFilterType.scoreRange) {
+      final ungrouped = filtered
+          .where((photo) => photo.groupName == null)
+          .toList();
+      if (ungrouped.isNotEmpty) {
+        filtered = ungrouped;
+      }
+    }
+
     final assetIds = filtered.map((photo) => photo.assetId).toList();
     final assetFutures = assetIds.map((id) => AssetEntity.fromId(id));
     final assets = (await Future.wait(
@@ -405,6 +416,7 @@ class _PickSwipePageState extends State<PickSwipePage>
                                   onPanEnd: null,
                                   onDoubleTap: null,
                                   onTap: null,
+                                  useAdvancedScore: settings.enableAdvancedScore,
                                 ),
                               if (photo != null && asset != null)
                                 _buildUnifiedCard(
@@ -424,6 +436,7 @@ class _PickSwipePageState extends State<PickSwipePage>
                                   onTap: useSingleTapPreview
                                       ? () => _openPreview(photo)
                                       : null,
+                                  useAdvancedScore: settings.enableAdvancedScore,
                                 )
                               else
                                 const Text('没有更多照片了'),
@@ -445,6 +458,7 @@ class _PickSwipePageState extends State<PickSwipePage>
                                   onPanEnd: null,
                                   onDoubleTap: null,
                                   onTap: null,
+                                  useAdvancedScore: settings.enableAdvancedScore,
                                 ),
                             ],
                           );
@@ -515,6 +529,14 @@ class _SwipeAction {
   final String newGroup;
 }
 
+int _convertToBasicScore(int advancedScore) {
+  if (advancedScore <= 20) return 1;
+  if (advancedScore <= 40) return 2;
+  if (advancedScore <= 60) return 3;
+  if (advancedScore <= 80) return 4;
+  return 5;
+}
+
 Widget _buildUnifiedCard({
   Key? key,
   required Size size,
@@ -528,6 +550,7 @@ Widget _buildUnifiedCard({
   required GestureDragEndCallback? onPanEnd,
   required VoidCallback? onDoubleTap,
   required VoidCallback? onTap,
+  required bool useAdvancedScore,
 }) {
   final borderRadius = BorderRadius.circular(20);
 
@@ -541,9 +564,18 @@ Widget _buildUnifiedCard({
       : dragOffset.dx < 0
       ? Colors.red
       : Colors.transparent;
-  final shadowColor = isDragging
-      ? baseColor.withValues(alpha: 0.2 + 0.4 * swipeProgress)
-      : Colors.black26;
+
+  // 根据分组状态决定阴影颜色
+  Color shadowColor;
+  if (isDragging) {
+    shadowColor = baseColor.withValues(alpha: 0.2 + 0.4 * swipeProgress);
+  } else if (photo.groupName == groupPendingDelete) {
+    shadowColor = Colors.red.withValues(alpha: 0.6);
+  } else if (photo.groupName == groupConfirmed) {
+    shadowColor = Colors.green.withValues(alpha: 0.6);
+  } else {
+    shadowColor = Colors.black26;
+  }
 
   // 背景卡片的阴影颜色，随 progress 逐渐变深
   final backgroundShadowColor = isBackground
@@ -618,6 +650,32 @@ Widget _buildUnifiedCard({
                     ),
                   ),
                 ),
+                // 显示 tag1 在右上角
+                if (photo.tag1 != null)
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.6),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        useAdvancedScore
+                            ? '${photo.tag1}'
+                            : '${_convertToBasicScore(photo.tag1!)}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ),
                 if (isDragging)
                   Positioned.fill(
                     child: Center(
