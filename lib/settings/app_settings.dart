@@ -2,14 +2,24 @@ import 'package:flutter/material.dart';
 
 class AppSettings extends ChangeNotifier {
   bool _enableSingleTapPreview = false;
+  bool _showAdvancedScore = false;
 
   bool get enableSingleTapPreview => _enableSingleTapPreview;
+  bool get showAdvancedScore => _showAdvancedScore;
 
   void setEnableSingleTapPreview(bool value) {
     if (_enableSingleTapPreview == value) {
       return;
     }
     _enableSingleTapPreview = value;
+    notifyListeners();
+  }
+
+  void setShowAdvancedScore(bool value) {
+    if (_showAdvancedScore == value) {
+      return;
+    }
+    _showAdvancedScore = value;
     notifyListeners();
   }
 }

@@ -9,25 +9,29 @@ import 'pick_constants.dart';
 import 'pick_models.dart';
 import 'pick_preview_page.dart';
 import 'pick_repository.dart';
+import 'pick_score.dart';
 import 'pick_shared_widgets.dart';
 
 class PickFilter {
-  const PickFilter._(this.type, this.groupName);
+  const PickFilter._(this.type, this.groupName, this.score);
 
-  const PickFilter.all() : this._(PickFilterType.all, null);
+  const PickFilter.all() : this._(PickFilterType.all, null, null);
 
-  const PickFilter.ungrouped() : this._(PickFilterType.ungrouped, null);
+  const PickFilter.ungrouped() : this._(PickFilterType.ungrouped, null, null);
 
-  const PickFilter.grouped() : this._(PickFilterType.grouped, null);
+  const PickFilter.grouped() : this._(PickFilterType.grouped, null, null);
 
   const PickFilter.group(String groupName)
-    : this._(PickFilterType.group, groupName);
+    : this._(PickFilterType.group, groupName, null);
+
+  const PickFilter.score(int score) : this._(PickFilterType.score, null, score);
 
   final PickFilterType type;
   final String? groupName;
+  final int? score;
 }
 
-enum PickFilterType { all, ungrouped, grouped, group }
+enum PickFilterType { all, ungrouped, grouped, group, score }
 
 class PickSwipePage extends StatefulWidget {
   const PickSwipePage({
@@ -50,6 +54,8 @@ class _PickSwipePageState extends State<PickSwipePage>
   final PickRepository _repository = PickRepository.instance;
   final List<_SwipeAction> _actions = [];
   final Map<String, AssetEntity> _assets = {};
+  final Map<int, int> _advancedScores = {};
+  final Map<int, int> _displayScores = {};
   List<PickPhoto> _photos = [];
   bool _loading = true;
   Offset _dragOffset = Offset.zero;
@@ -100,6 +106,7 @@ class _PickSwipePageState extends State<PickSwipePage>
   }
 
   Future<void> _loadAssets() async {
+    await _ensureScores(widget.allPhotos);
     final filtered = widget.allPhotos.where((photo) {
       switch (widget.filter.type) {
         case PickFilterType.all:
@@ -110,6 +117,17 @@ class _PickSwipePageState extends State<PickSwipePage>
           return photo.groupName != null;
         case PickFilterType.group:
           return photo.groupName == widget.filter.groupName;
+        case PickFilterType.score:
+          final advancedScore = _advancedScores[photo.id] ?? photo.tag1;
+          if (advancedScore == null) {
+            return false;
+          }
+          final settings = AppSettingsScope.of(context);
+          final displayScore = displayScoreForSettings(
+            advancedScore: advancedScore,
+            settings: settings,
+          );
+          return displayScore == widget.filter.score;
       }
     }).toList();
     final assetIds = filtered.map((photo) => photo.assetId).toList();
@@ -126,6 +144,46 @@ class _PickSwipePageState extends State<PickSwipePage>
     setState(() {
       _photos = filtered;
       _loading = false;
+    });
+  }
+
+  Future<void> _ensureScores(List<PickPhoto> photos) async {
+    final settings = AppSettingsScope.of(context);
+    final toUpdate = <Future<void>>[];
+    for (final photo in photos) {
+      if (photo.tag1 == null) {
+        final score = generateRandomAdvancedScore();
+        toUpdate.add(_repository.updateTags(photoId: photo.id, tag1: score));
+        _advancedScores[photo.id] = score;
+      } else {
+        _advancedScores[photo.id] = photo.tag1!;
+      }
+    }
+    if (toUpdate.isNotEmpty) {
+      await Future.wait(toUpdate);
+    }
+    for (final entry in _advancedScores.entries) {
+      _displayScores[entry.key] = displayScoreForSettings(
+        advancedScore: entry.value,
+        settings: settings,
+      );
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_photos.isEmpty) {
+      return;
+    }
+    final settings = AppSettingsScope.of(context);
+    setState(() {
+      for (final entry in _advancedScores.entries) {
+        _displayScores[entry.key] = displayScoreForSettings(
+          advancedScore: entry.value,
+          settings: settings,
+        );
+      }
     });
   }
 
@@ -148,6 +206,8 @@ class _PickSwipePageState extends State<PickSwipePage>
   }
 
   AssetEntity? _assetForPhoto(PickPhoto photo) => _assets[photo.assetId];
+
+  int? _scoreForPhoto(PickPhoto photo) => _displayScores[photo.id];
 
   Future<void> _handleDecision(String groupName) async {
     final photo = _currentPhoto;
@@ -370,6 +430,7 @@ class _PickSwipePageState extends State<PickSwipePage>
                                   size: size,
                                   asset: nextAsset,
                                   photo: nextPhoto,
+                                  displayScore: _scoreForPhoto(nextPhoto),
                                   isBackground: true,
                                   backgroundProgress: backgroundProgress,
                                   dragOffset: Offset.zero,
@@ -385,6 +446,7 @@ class _PickSwipePageState extends State<PickSwipePage>
                                   size: size,
                                   asset: asset,
                                   photo: photo,
+                                  displayScore: _scoreForPhoto(photo),
                                   isBackground: false,
                                   backgroundProgress: 1.0,
                                   dragOffset: activeOffset,
@@ -408,6 +470,7 @@ class _PickSwipePageState extends State<PickSwipePage>
                                   size: size,
                                   asset: _exitingAsset!,
                                   photo: _exitingPhoto!,
+                                  displayScore: _scoreForPhoto(_exitingPhoto!),
                                   isBackground: false,
                                   backgroundProgress: 1.0,
                                   dragOffset:
@@ -445,6 +508,8 @@ class _PickSwipePageState extends State<PickSwipePage>
         return '已分组';
       case PickFilterType.group:
         return filter.groupName ?? '分组';
+      case PickFilterType.score:
+        return '评分 ${filter.score ?? ''}'.trim();
     }
   }
 }
@@ -491,6 +556,7 @@ Widget _buildUnifiedCard({
   required Size size,
   required AssetEntity asset,
   required PickPhoto photo,
+  required int? displayScore,
   required bool isBackground,
   required double backgroundProgress,
   required Offset dragOffset,
@@ -611,6 +677,27 @@ Widget _buildUnifiedCard({
                       ),
                     ),
                   ),
+                Positioned(
+                  top: 12,
+                  right: 12,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.6),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Text(
+                      '评分 ${displayScore ?? '-'}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
               ],
             ),
           ),

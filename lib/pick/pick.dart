@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:photo_manager/photo_manager.dart';
 
+import '../settings/app_settings.dart';
 import 'pick_constants.dart';
 import 'pick_models.dart';
 import 'pick_repository.dart';
+import 'pick_score.dart';
 import 'pick_selection_page.dart';
 import 'pick_shared_widgets.dart';
 import 'pick_swipe_page.dart';
@@ -69,15 +71,34 @@ class _PickPageState extends State<PickPage> {
       return;
     }
     final photos = await _repository.fetchPhotos(_session!.id);
+    final scoredPhotos = await _ensureScores(photos);
     final summaries = await _repository.fetchGroupSummaries(_session!.id);
     if (!mounted) {
       return;
     }
     setState(() {
-      _photos = photos;
+      _photos = scoredPhotos;
       _groupSummaries = summaries;
       _loading = false;
     });
+  }
+
+  Future<List<PickPhoto>> _ensureScores(List<PickPhoto> photos) async {
+    final updated = <PickPhoto>[];
+    final updates = <Future<void>>[];
+    for (final photo in photos) {
+      if (photo.tag1 == null) {
+        final score = generateRandomAdvancedScore();
+        updates.add(_repository.updateTags(photoId: photo.id, tag1: score));
+        updated.add(photo.copyWith(tag1: score));
+      } else {
+        updated.add(photo);
+      }
+    }
+    if (updates.isNotEmpty) {
+      await Future.wait(updates);
+    }
+    return updated;
   }
 
   Future<void> _openSelection() async {
@@ -165,11 +186,25 @@ class _PickPageState extends State<PickPage> {
 
   @override
   Widget build(BuildContext context) {
+    final settings = AppSettingsScope.of(context);
     final totalCount = _photos.length;
     final ungroupedCount = _photos
         .where((photo) => photo.groupName == null)
         .length;
     final groupedCount = totalCount - ungroupedCount;
+    final scoreCounts = <int, int>{};
+    for (final photo in _photos) {
+      final advancedScore = photo.tag1;
+      if (advancedScore == null) {
+        continue;
+      }
+      final displayScore = displayScoreForSettings(
+        advancedScore: advancedScore,
+        settings: settings,
+      );
+      scoreCounts.update(displayScore, (value) => value + 1, ifAbsent: () => 1);
+    }
+    final sortedScores = scoreCounts.keys.toList()..sort();
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.title),
@@ -211,6 +246,22 @@ class _PickPageState extends State<PickPage> {
                     icon: Icons.folder_open,
                     onTap: () => _openSwipe(const PickFilter.grouped()),
                   ),
+                  const SizedBox(height: 16),
+                  _SectionTitle(
+                    title:
+                        settings.showAdvancedScore ? '高级评分分组' : '评分分组',
+                  ),
+                  if (scoreCounts.isEmpty)
+                    const EmptyGroupHint()
+                  else
+                    ...sortedScores.map(
+                      (score) => _EntryTile(
+                        title: '评分 $score',
+                        subtitle: '${scoreCounts[score]} 张',
+                        icon: Icons.star_border,
+                        onTap: () => _openSwipe(PickFilter.score(score)),
+                      ),
+                    ),
                   const SizedBox(height: 16),
                   _SectionTitle(title: '分组列表'),
                   if (_groupSummaries.isEmpty)
