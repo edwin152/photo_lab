@@ -12,22 +12,42 @@ import 'pick_repository.dart';
 import 'pick_shared_widgets.dart';
 
 class PickFilter {
-  const PickFilter._(this.type, this.groupName);
+  const PickFilter._(
+    this.type, {
+    this.groupName,
+    this.scoreLabel,
+    this.minScore,
+    this.maxScore,
+  });
 
-  const PickFilter.all() : this._(PickFilterType.all, null);
+  const PickFilter.all() : this._(PickFilterType.all);
 
-  const PickFilter.ungrouped() : this._(PickFilterType.ungrouped, null);
+  const PickFilter.ungrouped() : this._(PickFilterType.ungrouped);
 
-  const PickFilter.grouped() : this._(PickFilterType.grouped, null);
+  const PickFilter.grouped() : this._(PickFilterType.grouped);
 
   const PickFilter.group(String groupName)
-    : this._(PickFilterType.group, groupName);
+    : this._(PickFilterType.group, groupName: groupName);
+
+  const PickFilter.scoreRange({
+    required String label,
+    required int minScore,
+    required int maxScore,
+  }) : this._(
+        PickFilterType.scoreRange,
+        scoreLabel: label,
+        minScore: minScore,
+        maxScore: maxScore,
+      );
 
   final PickFilterType type;
   final String? groupName;
+  final String? scoreLabel;
+  final int? minScore;
+  final int? maxScore;
 }
 
-enum PickFilterType { all, ungrouped, grouped, group }
+enum PickFilterType { all, ungrouped, grouped, group, scoreRange }
 
 class PickSwipePage extends StatefulWidget {
   const PickSwipePage({
@@ -110,6 +130,13 @@ class _PickSwipePageState extends State<PickSwipePage>
           return photo.groupName != null;
         case PickFilterType.group:
           return photo.groupName == widget.filter.groupName;
+        case PickFilterType.scoreRange:
+          final score = photo.tag1;
+          if (score == null) {
+            return false;
+          }
+          return score >= (widget.filter.minScore ?? 1) &&
+              score <= (widget.filter.maxScore ?? 100);
       }
     }).toList();
     final assetIds = filtered.map((photo) => photo.assetId).toList();
@@ -445,6 +472,8 @@ class _PickSwipePageState extends State<PickSwipePage>
         return '已分组';
       case PickFilterType.group:
         return filter.groupName ?? '分组';
+      case PickFilterType.scoreRange:
+        return '评分 ${filter.scoreLabel ?? ''}'.trim();
     }
   }
 }

@@ -153,7 +153,7 @@ class PickRepository {
     final db = await _getDatabase();
     await db.update(
       'pick_photos',
-      {'tag1': ?tag1, 'tag2': ?tag2, 'tag3': ?tag3},
+      {'tag1': tag1, 'tag2': tag2, 'tag3': tag3},
       where: 'id = ?',
       whereArgs: [photoId],
     );

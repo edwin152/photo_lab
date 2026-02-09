@@ -73,6 +73,15 @@ class _PreviewSettingsCard extends StatelessWidget {
               value: settings.enableSingleTapPreview,
               onChanged: settings.setEnableSingleTapPreview,
             ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('AI 评分展示'),
+              subtitle: Text(
+                settings.enableAdvancedScore ? '显示高级评分（1-100）' : '显示基础评分（1-5）',
+              ),
+              value: settings.enableAdvancedScore,
+              onChanged: settings.setEnableAdvancedScore,
+            ),
           ],
         ),
       ),
