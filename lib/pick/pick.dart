@@ -1,4 +1,4 @@
-import 'dart:math';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:photo_manager/photo_manager.dart';
@@ -10,6 +10,8 @@ import 'pick_selection_page.dart';
 import 'pick_shared_widgets.dart';
 import 'pick_swipe_page.dart';
 import '../settings/app_settings.dart';
+import 'model/aesthetic_score_model.dart';
+import 'model/mobilenetv3_large_aesthetic_model.dart';
 
 class PickPage extends StatefulWidget {
   const PickPage({super.key, required this.title});
@@ -22,7 +24,7 @@ class PickPage extends StatefulWidget {
 
 class _PickPageState extends State<PickPage> {
   final PickRepository _repository = PickRepository.instance;
-  final Random _random = Random();
+  final AestheticScoreModel _scoreModel = MobileNetV3LargeAestheticModel();
   PickSession? _session;
   List<PickPhoto> _photos = [];
   List<PickGroupSummary> _groupSummaries = [];
@@ -185,7 +187,12 @@ class _PickPageState extends State<PickPage> {
     });
     for (var i = 0; i < photosToScore.length; i++) {
       final photo = photosToScore[i];
-      final score = _random.nextInt(100) + 1;
+      final asset = await AssetEntity.fromId(photo.assetId);
+      final bytes = await asset?.thumbnailDataWithSize(
+        const ThumbnailSize.square(512),
+      );
+      final result = await _scoreModel.score(bytes ?? Uint8List(0));
+      final score = result.roundedScore;
       await _repository.updateTags(photoId: photo.id, tag1: score);
       if (!mounted) {
         return;
