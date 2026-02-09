@@ -219,7 +219,9 @@ class _PickPageState extends State<PickPage> {
                     ..._groupSummaries.map(
                       (group) => _EntryTile(
                         title: group.groupName,
-                        subtitle: '${group.count} 张',
+                        subtitle: group.groupName == groupPendingDelete
+                            ? '${group.count} 张 · 长按删除照片'
+                            : '${group.count} 张',
                         icon: group.groupName == groupPendingDelete
                             ? Icons.delete_outline
                             : Icons.bookmark_outline,
