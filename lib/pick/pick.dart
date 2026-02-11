@@ -12,6 +12,7 @@ import 'pick_swipe_page.dart';
 import '../settings/app_settings.dart';
 import 'model/aesthetic_score_model.dart';
 import 'model/mobilenetv3_large_aesthetic_model.dart';
+import 'model/nima_aesthetic_model.dart';
 
 class PickPage extends StatefulWidget {
   const PickPage({super.key, required this.title});
@@ -24,7 +25,6 @@ class PickPage extends StatefulWidget {
 
 class _PickPageState extends State<PickPage> {
   final PickRepository _repository = PickRepository.instance;
-  final AestheticScoreModel _scoreModel = MobileNetV3LargeAestheticModel();
   PickSession? _session;
   List<PickPhoto> _photos = [];
   List<PickGroupSummary> _groupSummaries = [];
@@ -186,6 +186,8 @@ class _PickPageState extends State<PickPage> {
     if (_session == null || _scoring) {
       return;
     }
+    final settings = AppSettingsScope.of(context);
+    final scoreModel = _buildScoreModel(settings.scoreModelType);
     final photosToScore = _photos.where((photo) => photo.tag1 == null).toList();
     if (photosToScore.isEmpty) {
       return;
@@ -201,7 +203,7 @@ class _PickPageState extends State<PickPage> {
       final bytes = await asset?.thumbnailDataWithSize(
         const ThumbnailSize.square(512),
       );
-      final result = await _scoreModel.score(bytes ?? Uint8List(0));
+      final result = await scoreModel.score(bytes ?? Uint8List(0));
       final score = result.roundedScore;
       await _repository.updateTags(photoId: photo.id, tag1: score);
       if (!mounted) {
@@ -359,6 +361,7 @@ class _PickPageState extends State<PickPage> {
                           scoring: _scoring,
                           completed: _scoreCompleted,
                           total: _scoreTotal,
+                          modelName: settings.scoreModelType.label,
                           onPressed: _scoring || _photos.isEmpty
                               ? null
                               : _runAiScore,
@@ -370,6 +373,16 @@ class _PickPageState extends State<PickPage> {
               ],
             ),
     );
+  }
+
+
+  AestheticScoreModel _buildScoreModel(ScoreModelType type) {
+    switch (type) {
+      case ScoreModelType.mobileNetV3:
+        return MobileNetV3LargeAestheticModel();
+      case ScoreModelType.nima:
+        return NimaAestheticModel();
+    }
   }
 }
 
@@ -618,12 +631,14 @@ class _AiScoreActionCard extends StatelessWidget {
     required this.scoring,
     required this.completed,
     required this.total,
+    required this.modelName,
     required this.onPressed,
   });
 
   final bool scoring;
   final int completed;
   final int total;
+  final String modelName;
   final VoidCallback? onPressed;
 
   @override
@@ -633,6 +648,8 @@ class _AiScoreActionCard extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
+        Text('当前模型：$modelName', style: Theme.of(context).textTheme.bodySmall),
+        const SizedBox(height: 8),
         if (scoring)
           Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,

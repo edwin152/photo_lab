@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+
 import '../settings/app_settings.dart';
 
 class ProfilePage extends StatelessWidget {
@@ -77,10 +78,35 @@ class _PreviewSettingsCard extends StatelessWidget {
               contentPadding: EdgeInsets.zero,
               title: const Text('AI 评分展示'),
               subtitle: Text(
-                settings.enableAdvancedScore ? '显示高级评分（1-100）' : '显示基础评分（1-5）',
+                settings.enableAdvancedScore
+                    ? '显示高级分组（1-100区间）'
+                    : '显示基础分组（1-5）；实际评分始终为1-100',
               ),
               value: settings.enableAdvancedScore,
               onChanged: settings.setEnableAdvancedScore,
+            ),
+            const Divider(),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('AI 评分模型'),
+              subtitle: Text(
+                '手动选择模型，不会自动切换。当前：${settings.scoreModelType.label}',
+              ),
+            ),
+            ...ScoreModelType.values.map(
+              (model) => RadioListTile<ScoreModelType>(
+                contentPadding: EdgeInsets.zero,
+                title: Text(model.label),
+                subtitle: Text(model.description),
+                value: model,
+                groupValue: settings.scoreModelType,
+                onChanged: (value) {
+                  if (value == null) {
+                    return;
+                  }
+                  settings.setScoreModelType(value);
+                },
+              ),
             ),
           ],
         ),

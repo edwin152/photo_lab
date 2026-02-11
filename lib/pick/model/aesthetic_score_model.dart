@@ -21,6 +21,8 @@ class AestheticScoreResult {
 }
 
 abstract class AestheticScoreModel {
+  String get modelName;
+
   Future<AestheticScoreResult> score(Uint8List imageBytes);
 
   /// Ranking loss with pairwise labels.
