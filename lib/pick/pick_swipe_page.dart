@@ -150,19 +150,24 @@ class _PickSwipePageState extends State<PickSwipePage>
       }
     }
 
-    final assetIds = filtered.map((photo) => photo.assetId).toList();
-    final assetFutures = assetIds.map((id) => AssetEntity.fromId(id));
-    final assets = (await Future.wait(
-      assetFutures,
-    )).whereType<AssetEntity>().toList();
-    for (final asset in assets) {
-      _assets[asset.id] = asset;
+    // 获取所有照片的 AssetEntity，过滤掉已删除的照片
+    final validPhotos = <PickPhoto>[];
+    for (final photo in filtered) {
+      final asset = await AssetEntity.fromId(photo.assetId);
+      if (asset != null) {
+        _assets[asset.id] = asset;
+        validPhotos.add(photo);
+      } else {
+        // 照片在系统中已被删除，记录日志
+        debugPrint('Photo ${photo.assetId} has been deleted from system');
+      }
     }
+    
     if (!mounted) {
       return;
     }
     setState(() {
-      _photos = filtered;
+      _photos = validPhotos;
       _loading = false;
     });
   }

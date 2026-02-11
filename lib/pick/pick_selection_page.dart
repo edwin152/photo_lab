@@ -14,7 +14,6 @@ class _PickSelectionPageState extends State<PickSelectionPage> {
   List<AssetPathEntity> _albums = [];
   AssetPathEntity? _currentAlbum;
   List<AssetEntity> _assets = [];
-  List<AssetEntity> _sourceAssets = [];
   final Set<String> _selected = {};
   bool _loading = true;
   bool _ascending = false;
@@ -52,7 +51,6 @@ class _PickSelectionPageState extends State<PickSelectionPage> {
     if (_currentAlbum == null) {
       setState(() {
         _assets = [];
-        _sourceAssets = [];
         _loading = false;
       });
       return;
@@ -60,19 +58,29 @@ class _PickSelectionPageState extends State<PickSelectionPage> {
     setState(() {
       _loading = true;
     });
-    final assets = await _currentAlbum!.getAssetListPaged(page: 0, size: 200);
+
+    // 获取相册中的所有照片，按拍摄时间排序
+    // AssetEntity.createDateTime 已经包含了 EXIF 拍摄时间
+    final assetCount = await _currentAlbum!.assetCountAsync;
+    final assets = await _currentAlbum!.getAssetListRange(
+      start: 0,
+      end: assetCount,
+    );
+
+    // 按 createDateTime 排序（包含 EXIF 拍摄时间）
+    assets.sort((a, b) {
+      return _ascending
+          ? a.createDateTime.compareTo(b.createDateTime)
+          : b.createDateTime.compareTo(a.createDateTime);
+    });
+
     if (!mounted) {
       return;
     }
     setState(() {
-      _sourceAssets = assets;
-      _assets = _applyOrder(assets);
+      _assets = assets;
       _loading = false;
     });
-  }
-
-  List<AssetEntity> _applyOrder(List<AssetEntity> assets) {
-    return _ascending ? assets.reversed.toList() : List.of(assets);
   }
 
   void _toggleSelection(String assetId) {
@@ -88,7 +96,12 @@ class _PickSelectionPageState extends State<PickSelectionPage> {
   void _toggleOrder() {
     setState(() {
       _ascending = !_ascending;
-      _assets = _applyOrder(_sourceAssets);
+      // 重新排序现有资源
+      _assets.sort((a, b) {
+        return _ascending
+            ? a.createDateTime.compareTo(b.createDateTime)
+            : b.createDateTime.compareTo(a.createDateTime);
+      });
     });
   }
 

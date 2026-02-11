@@ -29,11 +29,11 @@ class MobileNetV3LargeAestheticModel extends AestheticScoreModel {
   }) {
     if (label == 0) {
       final diff = (scoreA - scoreB).abs();
-      return log1p(exp(diff));
+      return log(1 + exp(diff));
     }
     final direction = label > 0 ? 1.0 : -1.0;
     final diff = direction * (scoreA - scoreB);
-    return log1p(exp(-diff));
+    return log(1 + exp(-diff));
   }
 
   Float32List _extractEmbedding(Uint8List bytes) {

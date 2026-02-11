@@ -78,12 +78,22 @@ class _PickPageState extends State<PickPage> {
       return;
     }
     final photos = await _repository.fetchPhotos(_session!.id);
+    
+    // 验证照片在系统中是否还存在，过滤掉已删除的照片
+    final validPhotos = <PickPhoto>[];
+    for (final photo in photos) {
+      final asset = await AssetEntity.fromId(photo.assetId);
+      if (asset != null) {
+        validPhotos.add(photo);
+      }
+    }
+    
     final summaries = await _repository.fetchGroupSummaries(_session!.id);
     if (!mounted) {
       return;
     }
     setState(() {
-      _photos = photos;
+      _photos = validPhotos;
       _groupSummaries = summaries;
       _loading = false;
     });
