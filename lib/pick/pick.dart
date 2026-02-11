@@ -11,7 +11,8 @@ import 'pick_shared_widgets.dart';
 import 'pick_swipe_page.dart';
 import '../settings/app_settings.dart';
 import 'model/aesthetic_score_model.dart';
-import 'model/mobilenetv3_large_aesthetic_model.dart';
+import 'model/model_catalog.dart';
+import 'model/score_model_factory.dart';
 
 class PickPage extends StatefulWidget {
   const PickPage({super.key, required this.title});
@@ -24,7 +25,6 @@ class PickPage extends StatefulWidget {
 
 class _PickPageState extends State<PickPage> {
   final PickRepository _repository = PickRepository.instance;
-  final AestheticScoreModel _scoreModel = MobileNetV3LargeAestheticModel();
   PickSession? _session;
   List<PickPhoto> _photos = [];
   List<PickGroupSummary> _groupSummaries = [];
@@ -186,6 +186,19 @@ class _PickPageState extends State<PickPage> {
     if (_session == null || _scoring) {
       return;
     }
+    final settings = AppSettingsScope.of(context);
+    final modelDef = scoreModelByType(settings.selectedModel);
+    final modelPath = settings.modelPathOf(settings.selectedModel);
+    if (modelDef.requiresDownload && (modelPath == null || modelPath.isEmpty)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('请先在设置中下载 ${modelDef.title} 模型。')),
+      );
+      return;
+    }
+    final AestheticScoreModel scoreModel = createScoreModel(
+      type: settings.selectedModel,
+      modelPath: modelPath,
+    );
     final photosToScore = _photos.where((photo) => photo.tag1 == null).toList();
     if (photosToScore.isEmpty) {
       return;
@@ -201,7 +214,7 @@ class _PickPageState extends State<PickPage> {
       final bytes = await asset?.thumbnailDataWithSize(
         const ThumbnailSize.square(512),
       );
-      final result = await _scoreModel.score(bytes ?? Uint8List(0));
+      final result = await scoreModel.score(bytes ?? Uint8List(0));
       final score = result.roundedScore;
       await _repository.updateTags(photoId: photo.id, tag1: score);
       if (!mounted) {
