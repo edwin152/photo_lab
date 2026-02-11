@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 
+import 'score_model_option.dart';
+
 class AppSettings extends ChangeNotifier {
   bool _enableSingleTapPreview = false;
-  bool _enableAdvancedScore = false;
+  ScoreModelOption _scoreModel = ScoreModelOption.nimaTflite;
 
   bool get enableSingleTapPreview => _enableSingleTapPreview;
-  bool get enableAdvancedScore => _enableAdvancedScore;
+  ScoreModelOption get scoreModel => _scoreModel;
 
   void setEnableSingleTapPreview(bool value) {
     if (_enableSingleTapPreview == value) {
@@ -15,11 +17,11 @@ class AppSettings extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setEnableAdvancedScore(bool value) {
-    if (_enableAdvancedScore == value) {
+  void setScoreModel(ScoreModelOption value) {
+    if (_scoreModel == value) {
       return;
     }
-    _enableAdvancedScore = value;
+    _scoreModel = value;
     notifyListeners();
   }
 }

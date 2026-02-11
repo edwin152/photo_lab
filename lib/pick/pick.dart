@@ -10,8 +10,7 @@ import 'pick_selection_page.dart';
 import 'pick_shared_widgets.dart';
 import 'pick_swipe_page.dart';
 import '../settings/app_settings.dart';
-import 'model/aesthetic_score_model.dart';
-import 'model/mobilenetv3_large_aesthetic_model.dart';
+import 'model/aesthetic_model_factory.dart';
 
 class PickPage extends StatefulWidget {
   const PickPage({super.key, required this.title});
@@ -24,7 +23,6 @@ class PickPage extends StatefulWidget {
 
 class _PickPageState extends State<PickPage> {
   final PickRepository _repository = PickRepository.instance;
-  final AestheticScoreModel _scoreModel = MobileNetV3LargeAestheticModel();
   PickSession? _session;
   List<PickPhoto> _photos = [];
   List<PickGroupSummary> _groupSummaries = [];
@@ -195,13 +193,15 @@ class _PickPageState extends State<PickPage> {
       _scoreCompleted = 0;
       _scoreTotal = photosToScore.length;
     });
+    final settings = AppSettingsScope.of(context);
+    final scoreModel = AestheticModelFactory.fromOption(settings.scoreModel);
     for (var i = 0; i < photosToScore.length; i++) {
       final photo = photosToScore[i];
       final asset = await AssetEntity.fromId(photo.assetId);
       final bytes = await asset?.thumbnailDataWithSize(
         const ThumbnailSize.square(512),
       );
-      final result = await _scoreModel.score(bytes ?? Uint8List(0));
+      final result = await scoreModel.score(bytes ?? Uint8List(0));
       final score = result.roundedScore;
       await _repository.updateTags(photoId: photo.id, tag1: score);
       if (!mounted) {
@@ -227,7 +227,6 @@ class _PickPageState extends State<PickPage> {
 
   @override
   Widget build(BuildContext context) {
-    final settings = AppSettingsScope.of(context);
     final totalCount = _photos.length;
     final ungroupedCount = _photos
         .where((photo) => photo.groupName == null)
@@ -235,7 +234,6 @@ class _PickPageState extends State<PickPage> {
     final groupedCount = totalCount - ungroupedCount;
     final scoreBuckets = _buildScoreBuckets(
       photos: _photos,
-      advanced: settings.enableAdvancedScore,
     );
     return Scaffold(
       appBar: AppBar(
@@ -375,7 +373,6 @@ class _PickPageState extends State<PickPage> {
 
 List<_ScoreBucket> _buildScoreBuckets({
   required List<PickPhoto> photos,
-  required bool advanced,
 }) {
   final ranges = <_ScoreBucket>[
     const _ScoreBucket(label: '1', minScore: 1, maxScore: 20),
@@ -384,22 +381,6 @@ List<_ScoreBucket> _buildScoreBuckets({
     const _ScoreBucket(label: '4', minScore: 61, maxScore: 80),
     const _ScoreBucket(label: '5', minScore: 81, maxScore: 100),
   ];
-  if (advanced) {
-    return ranges.map((bucket) {
-      final stats = _countScoreInRangeByGroup(
-        photos,
-        bucket.minScore,
-        bucket.maxScore,
-      );
-      return bucket.copyWith(
-        label: '${bucket.minScore}-${bucket.maxScore}',
-        count: stats['total']!,
-        ungroupedCount: stats['ungrouped']!,
-        confirmedCount: stats['confirmed']!,
-        pendingDeleteCount: stats['pendingDelete']!,
-      );
-    }).toList();
-  }
   return ranges.map((bucket) {
     final stats = _countScoreInRangeByGroup(
       photos,
@@ -407,6 +388,7 @@ List<_ScoreBucket> _buildScoreBuckets({
       bucket.maxScore,
     );
     return bucket.copyWith(
+      label: '${bucket.minScore}-${bucket.maxScore}',
       count: stats['total']!,
       ungroupedCount: stats['ungrouped']!,
       confirmedCount: stats['confirmed']!,

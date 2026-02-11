@@ -421,7 +421,7 @@ class _PickSwipePageState extends State<PickSwipePage>
                                   onPanEnd: null,
                                   onDoubleTap: null,
                                   onTap: null,
-                                  useAdvancedScore: settings.enableAdvancedScore,
+                                  useAdvancedScore: true,
                                 ),
                               if (photo != null && asset != null)
                                 _buildUnifiedCard(
@@ -441,7 +441,7 @@ class _PickSwipePageState extends State<PickSwipePage>
                                   onTap: useSingleTapPreview
                                       ? () => _openPreview(photo)
                                       : null,
-                                  useAdvancedScore: settings.enableAdvancedScore,
+                                  useAdvancedScore: true,
                                 )
                               else
                                 const Text('没有更多照片了'),
@@ -463,7 +463,7 @@ class _PickSwipePageState extends State<PickSwipePage>
                                   onPanEnd: null,
                                   onDoubleTap: null,
                                   onTap: null,
-                                  useAdvancedScore: settings.enableAdvancedScore,
+                                  useAdvancedScore: true,
                                 ),
                             ],
                           );

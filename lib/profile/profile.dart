@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import '../settings/app_settings.dart';
+import '../settings/score_model_option.dart';
 
 class ProfilePage extends StatelessWidget {
   const ProfilePage({super.key});
@@ -73,14 +74,39 @@ class _PreviewSettingsCard extends StatelessWidget {
               value: settings.enableSingleTapPreview,
               onChanged: settings.setEnableSingleTapPreview,
             ),
-            SwitchListTile(
+            const Divider(height: 1),
+            ListTile(
               contentPadding: EdgeInsets.zero,
-              title: const Text('AI 评分展示'),
-              subtitle: Text(
-                settings.enableAdvancedScore ? '显示高级评分（1-100）' : '显示基础评分（1-5）',
+              title: const Text('AI 评分模型'),
+              subtitle: Text(settings.scoreModel.description),
+              trailing: DropdownButtonHideUnderline(
+                child: DropdownButton<ScoreModelOption>(
+                  value: settings.scoreModel,
+                  items: ScoreModelOption.values
+                      .map(
+                        (option) => DropdownMenuItem<ScoreModelOption>(
+                          value: option,
+                          child: Text(option.label),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (value) {
+                    if (value != null) {
+                      settings.setScoreModel(value);
+                    }
+                  },
+                ),
               ),
-              value: settings.enableAdvancedScore,
-              onChanged: settings.setEnableAdvancedScore,
+            ),
+            const Padding(
+              padding: EdgeInsets.only(bottom: 8),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  '评分区间固定为 1-100',
+                  style: TextStyle(color: Colors.grey),
+                ),
+              ),
             ),
           ],
         ),
